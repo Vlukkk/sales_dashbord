@@ -89,14 +89,47 @@ function matchesProductFilters(sku: string, product: Product | null, filters: Fi
   return true;
 }
 
+function sumInventoryForSkus(skus: string[], inventory: InventoryData) {
+  return skus.reduce(
+    (acc, sku) => {
+      const record = inventory.records[sku];
+      if (!record) {
+        return acc;
+      }
+
+      return {
+        sellable: acc.sellable + record.sellable,
+        total: acc.total + record.total,
+      };
+    },
+    { sellable: 0, total: 0 },
+  );
+}
+
+function withFullParentInventory(rows: ScopeRow[], catalog: CatalogData, inventory: InventoryData) {
+  return rows.map((row) => {
+    const parentSkus = catalog.parentGroups[row.key];
+    if (!parentSkus) {
+      return row;
+    }
+
+    const stock = sumInventoryForSkus(parentSkus, inventory);
+    return {
+      ...row,
+      stockSellable: stock.sellable,
+      stockTotal: stock.total,
+    };
+  });
+}
+
 export default function AggregatedTables({ visibleSales, inventory, catalog, filters, onSelectSku }: Props) {
   const skuRows = useMemo(
     () => buildScopeRows(visibleSales, 'artikelposition', inventory, 500),
     [visibleSales, inventory],
   );
   const parentRows = useMemo(
-    () => buildScopeRows(visibleSales, 'parentSku', inventory, 500),
-    [visibleSales, inventory],
+    () => withFullParentInventory(buildScopeRows(visibleSales, 'parentSku', inventory, 500), catalog, inventory),
+    [visibleSales, inventory, catalog],
   );
 
   // Add stale-stock rows: SKUs in inventory with stock > 0 but no sales in the current view.
