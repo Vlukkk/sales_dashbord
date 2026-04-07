@@ -47,7 +47,7 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales, onClose }:
       className="sku-drawer"
     >
       {!product ? (
-        <Typography.Text type="secondary">Produktinfo nicht verfügbar</Typography.Text>
+        <Typography.Text type="secondary">Информация о товаре недоступна</Typography.Text>
       ) : (
         <>
           <Typography.Paragraph style={{ fontSize: 14 }}>
@@ -55,47 +55,47 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales, onClose }:
           </Typography.Paragraph>
 
           <Descriptions column={1} size="small" bordered>
-            {parsed.metalType && <Descriptions.Item label="Metall">{parsed.metalType}</Descriptions.Item>}
-            {parsed.metalAlloy && <Descriptions.Item label="Legierung">{parsed.metalAlloy}</Descriptions.Item>}
-            {parsed.length && <Descriptions.Item label="Länge">{parsed.length} cm</Descriptions.Item>}
-            {parsed.width && <Descriptions.Item label="Breite">{parsed.width} mm</Descriptions.Item>}
-            {parsed.weight && <Descriptions.Item label="Gewicht">{parsed.weight} g</Descriptions.Item>}
-            {product.amaz_metal_stamp && <Descriptions.Item label="Stempel">{product.amaz_metal_stamp}</Descriptions.Item>}
-            {product.product_type && <Descriptions.Item label="Typ">{product.product_type}</Descriptions.Item>}
-            {product.supplier && <Descriptions.Item label="Lieferant">{product.supplier}</Descriptions.Item>}
-            {product.sku_vender && <Descriptions.Item label="Vendor SKU">{product.sku_vender}</Descriptions.Item>}
+            {parsed.metalType && <Descriptions.Item label="Металл">{parsed.metalType}</Descriptions.Item>}
+            {parsed.metalAlloy && <Descriptions.Item label="Сплав">{parsed.metalAlloy}</Descriptions.Item>}
+            {parsed.length && <Descriptions.Item label="Длина">{parsed.length} см</Descriptions.Item>}
+            {parsed.width && <Descriptions.Item label="Ширина">{parsed.width} мм</Descriptions.Item>}
+            {parsed.weight && <Descriptions.Item label="Вес">{parsed.weight} г</Descriptions.Item>}
+            {product.amaz_metal_stamp && <Descriptions.Item label="Клеймо">{product.amaz_metal_stamp}</Descriptions.Item>}
+            {product.product_type && <Descriptions.Item label="Тип">{product.product_type}</Descriptions.Item>}
+            {product.supplier && <Descriptions.Item label="Поставщик">{product.supplier}</Descriptions.Item>}
+            {product.sku_vender && <Descriptions.Item label="SKU поставщика">{product.sku_vender}</Descriptions.Item>}
             {product.purchase_price != null && (
-              <Descriptions.Item label="Einkaufspreis">{Number(product.purchase_price).toFixed(2)} €</Descriptions.Item>
+              <Descriptions.Item label="Закупочная цена">{Number(product.purchase_price).toFixed(2)} €</Descriptions.Item>
             )}
             {product.amaz_price != null && (
-              <Descriptions.Item label="Amazon Preis">{Number(product.amaz_price).toFixed(2)} €</Descriptions.Item>
+              <Descriptions.Item label="Цена Amazon">{Number(product.amaz_price).toFixed(2)} €</Descriptions.Item>
             )}
             {product.amaz_parent_sku && (
               <Descriptions.Item label="Parent SKU">{product.amaz_parent_sku}</Descriptions.Item>
             )}
           </Descriptions>
 
-          <Divider>Verkaufsübersicht</Divider>
+          <Divider>Сводка продаж</Divider>
           <div style={{ display: 'flex', gap: 16 }}>
-            <Tag color="blue">Bestellungen: {salesSummary.count}</Tag>
-            <Tag color="green">Umsatz: {salesSummary.totalInclTax.toFixed(2)} €</Tag>
-            <Tag color="gold">Gewinn: {salesSummary.totalProfit.toFixed(2)} €</Tag>
+            <Tag color="blue">Заказы: {salesSummary.count}</Tag>
+            <Tag color="green">Выручка: {salesSummary.totalInclTax.toFixed(2)} €</Tag>
+            <Tag color="gold">Прибыль: {salesSummary.totalProfit.toFixed(2)} €</Tag>
           </div>
 
-          <Divider>FBA Bestand</Divider>
+          <Divider>Остаток FBA</Divider>
           {inventoryRecord ? (
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              <Tag color="cyan">Sellable: {inventoryRecord.sellable}</Tag>
-              <Tag color="purple">Unsellable: {inventoryRecord.unsellable}</Tag>
-              <Tag>Total: {inventoryRecord.total}</Tag>
+              <Tag color="cyan">В продаже: {inventoryRecord.sellable}</Tag>
+              <Tag color="purple">Дефектные: {inventoryRecord.unsellable}</Tag>
+              <Tag>Всего: {inventoryRecord.total}</Tag>
             </div>
           ) : (
-            <Typography.Text type="secondary">Keine FBA-Bestandsdaten für diese SKU gefunden</Typography.Text>
+            <Typography.Text type="secondary">Нет данных FBA по этому SKU</Typography.Text>
           )}
 
           {siblings.length > 0 && (
             <>
-              <Divider>Varianten ({siblings.length})</Divider>
+              <Divider>Варианты ({siblings.length})</Divider>
               <List
                 size="small"
                 dataSource={siblings}
