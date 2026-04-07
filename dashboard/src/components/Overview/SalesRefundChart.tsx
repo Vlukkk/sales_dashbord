@@ -14,6 +14,7 @@ interface DailyPoint {
   sales: number;
   refunds: number;
   refundRate: number;
+  revenue: number;
 }
 
 interface ChartDatum {
@@ -23,6 +24,7 @@ interface ChartDatum {
   sales: number;
   refunds: number;
   refundRate: number;
+  revenue: number;
   label?: string;
 }
 
@@ -32,14 +34,15 @@ interface ChartSeries {
 }
 
 function buildDaily(sales: EnrichedSale[]): DailyPoint[] {
-  const map = new Map<string, { sales: number; refunds: number }>();
+  const map = new Map<string, { sales: number; refunds: number; revenue: number }>();
 
   for (const s of sales) {
     const day = s.bestelldatum?.slice(0, 10);
     if (!day) continue;
-    const cur = map.get(day) ?? { sales: 0, refunds: 0 };
+    const cur = map.get(day) ?? { sales: 0, refunds: 0, revenue: 0 };
     cur.sales += s.qtyOrdered ?? 0;
     cur.refunds += s.qtyRefunded ?? 0;
+    cur.revenue += s.totalInclTax ?? 0;
     map.set(day, cur);
   }
 
@@ -54,12 +57,13 @@ function buildDaily(sales: EnrichedSale[]): DailyPoint[] {
 
   while (cursor.isBefore(end) || cursor.isSame(end, 'day')) {
     const date = cursor.format('YYYY-MM-DD');
-    const current = map.get(date) ?? { sales: 0, refunds: 0 };
+    const current = map.get(date) ?? { sales: 0, refunds: 0, revenue: 0 };
     days.push({
       date,
       sales: current.sales,
       refunds: current.refunds,
       refundRate: current.sales > 0 ? (current.refunds / current.sales) * 100 : 0,
+      revenue: current.revenue,
     });
     cursor = cursor.add(1, 'day');
   }
@@ -118,6 +122,14 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(value);
 }
 
+function formatMoney(value: number) {
+  return new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
 function formatDate(value: string) {
   return dayjs(value).format('DD.MM');
 }
@@ -133,7 +145,7 @@ function buildSeries(points: DailyPoint[]): ChartSeries[] {
         x: point.date,
         y: point.sales,
         ...point,
-        label: salesLabels.has(index) ? `${formatNumber(point.sales)} шт` : undefined,
+        label: salesLabels.has(index) ? formatMoney(point.revenue) : undefined,
       })),
     },
     {
@@ -142,9 +154,7 @@ function buildSeries(points: DailyPoint[]): ChartSeries[] {
         x: point.date,
         y: point.refunds,
         ...point,
-        label: refundLabels.has(index)
-          ? `${formatNumber(point.refunds)} шт · ${point.refundRate.toFixed(0)}%`
-          : undefined,
+        label: refundLabels.has(index) ? `${point.refundRate.toFixed(0)}%` : undefined,
       })),
     },
   ];
@@ -210,7 +220,7 @@ export default function SalesRefundChart({ title, sales }: Props) {
         ) : (
           <ResponsiveLine<ChartSeries>
             data={series}
-            margin={{ top: 36, right: 28, bottom: 48, left: 42 }}
+            margin={{ top: 36, right: 28, bottom: 48, left: 56 }}
             xScale={{ type: 'point' }}
             yScale={{ type: 'linear', min: 0, max: 'auto', stacked: false, reverse: false }}
             curve="monotoneX"
@@ -219,9 +229,9 @@ export default function SalesRefundChart({ title, sales }: Props) {
             enableArea
             areaOpacity={0.06}
             enablePoints
-            pointSize={7}
+            pointSize={4}
             pointColor="#ffffff"
-            pointBorderWidth={2}
+            pointBorderWidth={1.5}
             pointBorderColor={{ from: 'seriesColor' }}
             enableGridX={false}
             gridYValues={4}
@@ -230,7 +240,13 @@ export default function SalesRefundChart({ title, sales }: Props) {
               tickRotation: -40,
               format: (value) => formatDate(String(value)),
             }}
-            axisLeft={{ tickSize: 0, tickPadding: 6 }}
+            axisLeft={{
+              tickSize: 0,
+              tickPadding: 6,
+              legend: 'Кол-во, шт',
+              legendOffset: -42,
+              legendPosition: 'middle',
+            }}
             enablePointLabel={false}
             enableSlices="x"
             useMesh={false}
@@ -245,7 +261,9 @@ export default function SalesRefundChart({ title, sales }: Props) {
                       <span style={{ color: point.seriesColor }}>{point.seriesId}</span>
                       <b>
                         {formatNumber(Number(datum.y))} шт
-                        {point.seriesId === 'Возвраты' ? ` · ${datum.refundRate.toFixed(1)}%` : ''}
+                        {point.seriesId === 'Возвраты'
+                          ? ` · ${datum.refundRate.toFixed(1)}%`
+                          : ` · ${formatMoney(datum.revenue)}`}
                       </b>
                     </div>
                   );
