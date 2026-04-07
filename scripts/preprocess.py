@@ -125,6 +125,7 @@ def parse_sales():
 
     sales = []
     filtered_90 = 0
+    skipped_summary = 0
     for row in rows[1:]:
         cells = row.findall("ss:Cell", NS)
         values = []
@@ -141,7 +142,13 @@ def parse_sales():
             col_idx += 1
 
         raw = dict(zip(headers, values))
-        art = raw.get("Artikelposition", "")
+        order_no = (raw.get("Bestellung #") or "").strip()
+        order_date = (raw.get("Bestelldatum") or "").strip()
+        art = (raw.get("Artikelposition") or "").strip()
+        if not order_no and not order_date and not art:
+            skipped_summary += 1
+            continue
+
         if art and art.startswith("90"):
             filtered_90 += 1
             continue
@@ -161,7 +168,7 @@ def parse_sales():
                 record[camel_key] = val
         sales.append(record)
 
-    print(f"Sales: {len(sales)} rows loaded, {filtered_90} filtered (90*)")
+    print(f"Sales: {len(sales)} rows loaded, {filtered_90} filtered (90*), {skipped_summary} summary rows skipped")
     return sales
 
 
