@@ -53,17 +53,23 @@ dashboard/dist
 ## VPS update flow
 
 ```bash
-cd /srv/sales-dashboard
-git pull
-cd dashboard
-npm ci
-cd ..
-python3 scripts/preprocess.py
-cd dashboard
-npm run build
-sudo rsync -a --delete dist/ /var/www/sales-dashboard/
-sudo nginx -t
-sudo systemctl reload nginx
+cd /srv/sales_dashbord
+./scripts/deploy.sh
 ```
 
-Nginx should serve `/var/www/sales-dashboard` with Basic Auth enabled.
+Nginx serves `/var/www/sales-dashboard` on port `8080` with Basic Auth enabled.
+
+Manual fallback:
+
+```bash
+cd /srv/sales_dashbord
+git pull --ff-only
+. .venv/bin/activate
+python3 scripts/preprocess.py
+cd dashboard
+npm install
+npm run build
+rsync -a --delete dist/ /var/www/sales-dashboard/
+nginx -t
+systemctl reload nginx
+```
