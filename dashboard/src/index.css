@@ -175,6 +175,10 @@ button { font: inherit; }
 .chart-card__title h3 { font-size: 15px; font-weight: 600; }
 .chart-card__title span { color: var(--muted); font-size: 12px; }
 .chart-card__body { height: 330px; }
+.chart-card__body--stacked { height: 460px; display: flex; flex-direction: column; }
+.chart-card__panel { width: 100%; }
+.chart-card__panel--top { flex: 0 0 240px; }
+.chart-card__panel--bottom { flex: 1 1 auto; min-height: 0; }
 .chart-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); font-size: 13px; }
 
 .chart-tooltip {
