@@ -320,6 +320,20 @@ function sumInventoryForSkus(skus: Set<string>, inventory: InventoryData) {
   return { sellable, total };
 }
 
+function formatLieferantLabel(values: Set<string>, fallback: string | null) {
+  const sorted = [...values].sort((left, right) => left.localeCompare(right));
+
+  if (sorted.length === 0) {
+    return fallback;
+  }
+
+  if (sorted.length <= 2) {
+    return sorted.join(', ');
+  }
+
+  return `${sorted.slice(0, 2).join(', ')} +${sorted.length - 2}`;
+}
+
 export function buildScopeRows(
   sales: EnrichedSale[],
   groupBy: GroupByKey,
@@ -331,6 +345,7 @@ export function buildScopeRows(
     SummaryAccumulator & {
       parentSku: string | null;
       lieferant: string | null;
+      lieferanten: Set<string>;
       productName: string | null;
       lastSaleDate: string | null;
     }
@@ -342,6 +357,7 @@ export function buildScopeRows(
       ...createAccumulator(),
       parentSku: sale.parentSku,
       lieferant: sale.lieferant,
+      lieferanten: new Set(sale.lieferant ? [sale.lieferant] : []),
       productName: sale.productName,
       lastSaleDate: sale.bestelldatum,
     };
@@ -354,6 +370,10 @@ export function buildScopeRows(
 
     if (!existing.lieferant && sale.lieferant) {
       existing.lieferant = sale.lieferant;
+    }
+
+    if (sale.lieferant) {
+      existing.lieferanten.add(sale.lieferant);
     }
 
     if (!existing.productName && sale.productName) {
@@ -376,7 +396,7 @@ export function buildScopeRows(
         key,
         label: key,
         parentSku: accumulator.parentSku,
-        lieferant: accumulator.lieferant,
+        lieferant: formatLieferantLabel(accumulator.lieferanten, accumulator.lieferant),
         productName: accumulator.productName,
         stockSellable: stock.sellable,
         stockTotal: stock.total,

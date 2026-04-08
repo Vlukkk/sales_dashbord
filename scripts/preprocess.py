@@ -81,14 +81,45 @@ PRODUCT_COLUMNS = [
     "ringe_size", "ringe_metal_aloy", "ringe_fassung", "ringe_produkt_type",
 ]
 
+LIEFERANT_ALIASES = {
+    "top gold": "Top Gold",
+}
+
 
 def parse_money(val: Optional[str]) -> Optional[float]:
     if not val:
         return None
-    cleaned = re.sub(r"[^\d,.\-]", "", val.replace("\xa0", ""))
-    cleaned = cleaned.replace(",", ".")
+
+    cleaned = re.sub(r"[^\d,.\-]", "", str(val).replace("\xa0", "").strip())
+    if not cleaned:
+        return None
+
+    sign = -1 if cleaned.count("-") % 2 else 1
+    cleaned = cleaned.replace("-", "")
+    if not cleaned:
+        return None
+
+    last_dot = cleaned.rfind(".")
+    last_comma = cleaned.rfind(",")
+
+    decimal_sep = None
+    if last_dot != -1 and last_comma != -1:
+        decimal_sep = "." if last_dot > last_comma else ","
+    elif last_comma != -1 and len(cleaned) - last_comma - 1 in (1, 2):
+        decimal_sep = ","
+    elif last_dot != -1 and len(cleaned) - last_dot - 1 in (1, 2):
+        decimal_sep = "."
+
+    if decimal_sep:
+        thousands_sep = "," if decimal_sep == "." else "."
+        cleaned = cleaned.replace(thousands_sep, "")
+        integer_part, fractional_part = cleaned.rsplit(decimal_sep, 1)
+        normalized = f"{integer_part}.{fractional_part}"
+    else:
+        normalized = cleaned.replace(",", "").replace(".", "")
+
     try:
-        return round(float(cleaned), 2)
+        return round(sign * float(normalized), 2)
     except ValueError:
         return None
 
@@ -110,6 +141,17 @@ def parse_margin(val: Optional[str]) -> Optional[float]:
         return round(float(cleaned), 1)
     except ValueError:
         return None
+
+
+def normalize_lieferant_name(val: Optional[str]) -> Optional[str]:
+    if not val:
+        return None
+
+    normalized = re.sub(r"\s+", " ", str(val)).strip()
+    if not normalized:
+        return None
+
+    return LIEFERANT_ALIASES.get(normalized.lower(), normalized)
 
 
 def parse_sales():
@@ -200,7 +242,7 @@ def parse_lieferanten() -> Dict[str, str]:
         if not row:
             continue
         sku = str(row[sku_idx]).strip() if row[sku_idx] is not None else ""
-        lf = str(row[lf_idx]).strip() if len(row) > lf_idx and row[lf_idx] is not None else ""
+        lf = normalize_lieferant_name(row[lf_idx] if len(row) > lf_idx else None) or ""
         if sku and lf:
             mapping[sku] = lf
     wb.close()

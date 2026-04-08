@@ -109,6 +109,11 @@ button { font: inherit; }
   gap: 6px;
 }
 
+.sidebar-lieferant-list--overflow {
+  padding-top: 8px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.24);
+}
+
 .sidebar-lieferant-row {
   width: 100%;
   appearance: none;
@@ -207,6 +212,27 @@ button { font: inherit; }
   color: var(--muted);
   font-size: 12px;
   background: rgba(248, 250, 252, 0.9);
+}
+
+.sidebar-lieferant-more {
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-lieferant-more__button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sidebar-lieferant-more__button:hover {
+  color: #1d4ed8;
 }
 
 /* Main */

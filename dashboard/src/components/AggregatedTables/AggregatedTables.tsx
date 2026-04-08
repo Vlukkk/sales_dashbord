@@ -20,6 +20,14 @@ function makeColumns(labelTitle: string): ColumnsType<ScopeRow> {
   return [
     { title: labelTitle, dataIndex: 'label', key: 'label', render: (v: string) => <strong>{v}</strong> },
     {
+      title: 'Поставщик',
+      dataIndex: 'lieferant',
+      key: 'lieferant',
+      sorter: (a, b) => (a.lieferant ?? '').localeCompare(b.lieferant ?? ''),
+      render: (value: string | null) => value ?? 'Без поставщика',
+      ellipsis: true,
+    },
+    {
       title: 'Продано',
       dataIndex: 'units',
       key: 'units',

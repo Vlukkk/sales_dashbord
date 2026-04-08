@@ -158,6 +158,7 @@ export default function SidebarLieferantPanel({
   onToggleLieferant,
 }: Props) {
   const [metricMode, setMetricMode] = useState<MetricMode>('revenue');
+  const [showOverflow, setShowOverflow] = useState(false);
   const lieferantSeries = useMemo(
     () => buildLieferantSeries(sales, catalog, dateRange),
     [sales, catalog, dateRange],
@@ -170,13 +171,54 @@ export default function SidebarLieferantPanel({
         }
 
         return right.totalRevenue - left.totalRevenue || right.totalUnits - left.totalUnits;
-      })
-      .slice(0, 6);
+      });
   }, [lieferantSeries, metricMode]);
+  const topRows = rows.slice(0, 6);
+  const overflowRows = rows.slice(6);
+  const overflowContainsActive = overflowRows.some((row) => activeLieferanten.includes(row.lieferant));
+  const overflowVisible = showOverflow || overflowContainsActive;
 
   if (rows.length === 0) {
     return <div className="sidebar-lieferant-empty">Нет данных по поставщикам в текущем срезе.</div>;
   }
+
+  const renderRow = (row: LieferantSeries) => {
+    const color = getLieferantColor(row.lieferant);
+    const primaryValue = metricMode === 'revenue'
+      ? formatRevenueShort(row.totalRevenue)
+      : formatUnitsShort(row.totalUnits);
+    const secondaryValue = metricMode === 'revenue'
+      ? formatUnitsShort(row.totalUnits)
+      : formatRevenueShort(row.totalRevenue);
+    const isActive = activeLieferanten.includes(row.lieferant);
+
+    return (
+      <button
+        key={row.lieferant}
+        type="button"
+        className={`sidebar-lieferant-row${isActive ? ' sidebar-lieferant-row--active' : ''}`}
+        onClick={() => onToggleLieferant(row.lieferant)}
+        aria-pressed={isActive}
+      >
+        <span className="sidebar-lieferant-row__meta">
+          <i className="sidebar-lieferant-row__dot" style={{ background: color }} />
+          <span className="sidebar-lieferant-row__name" title={row.lieferant}>
+            {row.lieferant}
+          </span>
+        </span>
+
+        <RowSparkline
+          points={metricMode === 'revenue' ? row.dailyRevenue : row.dailyUnits}
+          color={color}
+        />
+
+        <span className="sidebar-lieferant-row__values">
+          <strong className="sidebar-lieferant-row__value">{primaryValue}</strong>
+          <span className="sidebar-lieferant-row__subvalue">{secondaryValue}</span>
+        </span>
+      </button>
+    );
+  };
 
   return (
     <div className="sidebar-lieferant-card">
@@ -193,44 +235,27 @@ export default function SidebarLieferantPanel({
       />
 
       <div className="sidebar-lieferant-list">
-        {rows.map((row) => {
-          const color = getLieferantColor(row.lieferant);
-          const primaryValue = metricMode === 'revenue'
-            ? formatRevenueShort(row.totalRevenue)
-            : formatUnitsShort(row.totalUnits);
-          const secondaryValue = metricMode === 'revenue'
-            ? formatUnitsShort(row.totalUnits)
-            : formatRevenueShort(row.totalRevenue);
-          const isActive = activeLieferanten.includes(row.lieferant);
-
-          return (
-            <button
-              key={row.lieferant}
-              type="button"
-              className={`sidebar-lieferant-row${isActive ? ' sidebar-lieferant-row--active' : ''}`}
-              onClick={() => onToggleLieferant(row.lieferant)}
-              aria-pressed={isActive}
-            >
-              <span className="sidebar-lieferant-row__meta">
-                <i className="sidebar-lieferant-row__dot" style={{ background: color }} />
-                <span className="sidebar-lieferant-row__name" title={row.lieferant}>
-                  {row.lieferant}
-                </span>
-              </span>
-
-              <RowSparkline
-                points={metricMode === 'revenue' ? row.dailyRevenue : row.dailyUnits}
-                color={color}
-              />
-
-              <span className="sidebar-lieferant-row__values">
-                <strong className="sidebar-lieferant-row__value">{primaryValue}</strong>
-                <span className="sidebar-lieferant-row__subvalue">{secondaryValue}</span>
-              </span>
-            </button>
-          );
-        })}
+        {topRows.map(renderRow)}
       </div>
+
+      {overflowRows.length > 0 && (
+        <div className="sidebar-lieferant-more">
+          <button
+            type="button"
+            className="sidebar-lieferant-more__button"
+            onClick={() => setShowOverflow((value) => !value)}
+            aria-expanded={overflowVisible}
+          >
+            {overflowVisible ? 'Скрыть остальных' : `Ещё ${overflowRows.length} поставщиков`}
+          </button>
+
+          {overflowVisible && (
+            <div className="sidebar-lieferant-list sidebar-lieferant-list--overflow">
+              {overflowRows.map(renderRow)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

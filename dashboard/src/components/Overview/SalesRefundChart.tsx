@@ -34,6 +34,7 @@ interface ChartSeries {
 
 const COLOR_SALES = '#6366f1';
 const COLOR_REFUNDS = '#f43f5e';
+const COLOR_REFUND_LABEL = '#9f1239';
 const REFUND_RATE_ALERT = 10;
 
 function buildDaily(sales: EnrichedSale[]): DailyPoint[] {
@@ -124,8 +125,8 @@ function PointLabelLayer({ points }: LineCustomSvgLayerProps<ChartSeries>) {
               y={point.y + offset}
               textAnchor="middle"
               fontSize={isRefund ? 9 : 10}
-              fontWeight={500}
-              fill={isRefund ? '#f87171' : '#64748b'}
+              fontWeight={isRefund ? 700 : 500}
+              fill={isRefund ? COLOR_REFUND_LABEL : '#64748b'}
               stroke={isRefund ? undefined : '#ffffff'}
               strokeWidth={isRefund ? 0 : 3}
               paintOrder="stroke"

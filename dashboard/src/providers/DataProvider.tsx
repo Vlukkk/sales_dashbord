@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { DataContext, emptyData, type DataContextType } from '../context/data-context';
+import { normalizeCatalogData } from '../utils/lieferanten';
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<DataContextType>(emptyData);
@@ -19,7 +20,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           ? await inventoryResponse.json()
           : emptyData.inventory;
 
-        const [sales, catalog] = await Promise.all([salesResponse.json(), catalogResponse.json()]);
+        const [sales, rawCatalog] = await Promise.all([salesResponse.json(), catalogResponse.json()]);
+        const catalog = normalizeCatalogData(rawCatalog);
         setData({ sales, catalog, inventory, loading: false, error: null });
       })
       .catch((error: Error) => {
