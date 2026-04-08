@@ -107,9 +107,9 @@ export default function FilterPanel({
           mode="multiple"
           placeholder="Alle Lieferanten"
           style={{ width: '100%' }}
-          value={filters.supplier}
-          onChange={(v) => onFilterChange('supplier', v)}
-          options={catalog.suppliers.map((s) => ({ label: s, value: s }))}
+          value={filters.lieferant}
+          onChange={(v) => onFilterChange('lieferant', v)}
+          options={catalog.lieferanten.map((s) => ({ label: s, value: s }))}
           allowClear
         />
       </div>

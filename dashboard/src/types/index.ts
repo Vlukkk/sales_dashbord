@@ -58,7 +58,7 @@ export interface Product {
   chain_width: string | null;
   product_type: string | null;
   amaz_metal_stamp: string | null;
-  supplier: string | null;
+  lieferant: string | null;
   chain_weight: string | null;
   [key: string]: string | number | null | undefined;
 }
@@ -66,7 +66,7 @@ export interface Product {
 export interface CatalogData {
   products: Record<string, Product>;
   parentGroups: Record<string, string[]>;
-  suppliers: string[];
+  lieferanten: string[];
 }
 
 export interface InventoryRecord {
@@ -97,7 +97,7 @@ export interface FilterState {
   artikelposition: string;
   kundengruppe: string[];
   parentSku: string[];
-  supplier: string[];
+  lieferant: string[];
 }
 
 export type MetricKey =
@@ -112,7 +112,7 @@ export type MetricKey =
 export type GroupByKey =
   | 'artikelposition'
   | 'parentSku'
-  | 'supplier'
+  | 'lieferant'
   | 'channel'
   | 'status'
   | 'kundengruppe';
@@ -138,7 +138,7 @@ export interface GroupOption {
 
 export interface EnrichedSale extends SaleRecord {
   channel: string;
-  supplier: string | null;
+  lieferant: string | null;
   parentSku: string | null;
   productName: string | null;
 }

@@ -82,7 +82,7 @@ function matchesProductFilters(sku: string, product: Product | null, filters: Fi
     return false;
   }
 
-  if (filters.supplier.length > 0 && !filters.supplier.includes(product?.supplier ?? '')) {
+  if (filters.lieferant.length > 0 && !filters.lieferant.includes(product?.lieferant ?? '')) {
     return false;
   }
 
@@ -167,7 +167,7 @@ export default function AggregatedTables({ visibleSales, inventory, catalog, fil
         activeSkus: 1,
         rows: 0,
         parentSku: product?.amaz_parent_sku ?? null,
-        supplier: product?.supplier ?? null,
+        lieferant: product?.lieferant ?? null,
         productName: product?.amaz_name ?? null,
         stockSellable: rec.sellable,
         stockTotal: rec.total,

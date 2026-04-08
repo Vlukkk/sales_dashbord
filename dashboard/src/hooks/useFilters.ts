@@ -11,7 +11,7 @@ const initialFilters: FilterState = {
   artikelposition: '',
   kundengruppe: [],
   parentSku: [],
-  supplier: [],
+  lieferant: [],
 };
 
 export function useFilters(sales: SaleRecord[], catalog: CatalogData) {
@@ -37,8 +37,7 @@ export function useFilters(sales: SaleRecord[], catalog: CatalogData) {
 
     if (filters.channel.length > 0) {
       result = result.filter((sale) => {
-        const product = sale.artikelposition ? catalog.products[sale.artikelposition] : null;
-        const channel = deriveChannel(sale, product);
+        const channel = deriveChannel(sale);
         return filters.channel.includes(channel);
       });
     }
@@ -70,14 +69,14 @@ export function useFilters(sales: SaleRecord[], catalog: CatalogData) {
       result = result.filter((s) => s.artikelposition && childSkus.has(s.artikelposition));
     }
 
-    if (filters.supplier.length > 0) {
-      const supplierSkus = new Set<string>();
+    if (filters.lieferant.length > 0) {
+      const lieferantSkus = new Set<string>();
       for (const [sku, product] of Object.entries(catalog.products)) {
-        if (product.supplier && filters.supplier.some((s) => product.supplier!.includes(s))) {
-          supplierSkus.add(sku);
+        if (product.lieferant && filters.lieferant.includes(product.lieferant)) {
+          lieferantSkus.add(sku);
         }
       }
-      result = result.filter((s) => s.artikelposition && supplierSkus.has(s.artikelposition));
+      result = result.filter((s) => s.artikelposition && lieferantSkus.has(s.artikelposition));
     }
 
     return result;

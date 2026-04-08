@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import type { EnrichedSale, InventoryRecord, Product } from '../../types';
 import { formatMetricValue, type InventorySummary, type MetricSummary, type ScopeRow } from '../../utils/analytics';
 
-type FocusMode = 'sku' | 'parent' | 'supplier' | 'overview';
+type FocusMode = 'sku' | 'parent' | 'lieferant' | 'overview';
 
 interface Props {
   focusMode: FocusMode;
@@ -32,7 +32,7 @@ function secondaryMeta(row: ScopeRow) {
     return row.parentSku;
   }
 
-  return row.supplier ?? row.productName ?? 'No linked meta';
+  return row.lieferant ?? row.productName ?? 'No linked meta';
 }
 
 function MetricStrip({
@@ -177,8 +177,8 @@ function SkuDetail({
 
         <div className="sku-panel__facts">
           <div>
-            <span>Supplier</span>
-            <strong>{selectedProduct?.supplier ?? 'Unknown'}</strong>
+            <span>Lieferant</span>
+            <strong>{selectedProduct?.lieferant ?? 'Unknown'}</strong>
           </div>
           <div>
             <span>Parent</span>

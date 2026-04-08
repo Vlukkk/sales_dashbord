@@ -62,7 +62,7 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales, onClose }:
             {parsed.weight && <Descriptions.Item label="Вес">{parsed.weight} г</Descriptions.Item>}
             {product.amaz_metal_stamp && <Descriptions.Item label="Клеймо">{product.amaz_metal_stamp}</Descriptions.Item>}
             {product.product_type && <Descriptions.Item label="Тип">{product.product_type}</Descriptions.Item>}
-            {product.supplier && <Descriptions.Item label="Поставщик">{product.supplier}</Descriptions.Item>}
+            {product.lieferant && <Descriptions.Item label="Поставщик">{product.lieferant}</Descriptions.Item>}
             {product.sku_vender && <Descriptions.Item label="SKU поставщика">{product.sku_vender}</Descriptions.Item>}
             {product.purchase_price != null && (
               <Descriptions.Item label="Закупочная цена">{Number(product.purchase_price).toFixed(2)} €</Descriptions.Item>

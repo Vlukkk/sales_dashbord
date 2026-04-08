@@ -17,7 +17,7 @@ import {
   summarizeSales,
 } from '../utils/analytics';
 
-type FocusMode = 'sku' | 'parent' | 'supplier' | 'overview';
+type FocusMode = 'sku' | 'parent' | 'lieferant' | 'overview';
 
 interface UseDashboardAnalyticsArgs {
   sales: SaleRecord[];
@@ -63,7 +63,7 @@ function matchesFiltersExceptSku(sale: EnrichedSale, filters: FilterState) {
     return false;
   }
 
-  if (filters.supplier.length > 0 && (!sale.supplier || !filters.supplier.some((value) => sale.supplier?.includes(value)))) {
+  if (filters.lieferant.length > 0 && (!sale.lieferant || !filters.lieferant.includes(sale.lieferant))) {
     return false;
   }
 
@@ -81,8 +81,8 @@ function buildActiveChips(filters: FilterState, dateWindowLabel: string) {
     chips.push(`Channel: ${filters.channel.join(', ')}`);
   }
 
-  if (filters.supplier.length > 0) {
-    chips.push(`Supplier: ${filters.supplier.join(', ')}`);
+  if (filters.lieferant.length > 0) {
+    chips.push(`Lieferant: ${filters.lieferant.join(', ')}`);
   }
 
   if (filters.parentSku.length > 0) {
@@ -96,7 +96,7 @@ function buildActiveChips(filters: FilterState, dateWindowLabel: string) {
   return chips;
 }
 
-function focusMeta(mode: FocusMode, sku: string | null, parentSku: string | null, supplier: string | null) {
+function focusMeta(mode: FocusMode, sku: string | null, parentSku: string | null, lieferant: string | null) {
   if (mode === 'sku') {
     return {
       title: sku ?? 'SKU lens',
@@ -115,11 +115,11 @@ function focusMeta(mode: FocusMode, sku: string | null, parentSku: string | null
     };
   }
 
-  if (mode === 'supplier') {
+  if (mode === 'lieferant') {
     return {
-      title: supplier ?? 'Supplier lens',
+      title: lieferant ?? 'Lieferant',
       description: 'Какие SKU реально купили у выбранного поставщика и появились ли по ним возвраты.',
-      boardTitle: 'Sold SKU from supplier',
+      boardTitle: 'SKU поставщика',
       secondaryTitle: 'Return and stock pressure',
     };
   }
@@ -148,14 +148,14 @@ export function useDashboardAnalytics({
 
   const selectedSku = filters.artikelposition || null;
   const selectedParentSku = filters.parentSku.length === 1 ? filters.parentSku[0] : null;
-  const selectedSupplier = filters.supplier.length === 1 ? filters.supplier[0] : null;
+  const selectedLieferant = filters.lieferant.length === 1 ? filters.lieferant[0] : null;
 
   const focusMode: FocusMode = selectedSku
     ? 'sku'
     : selectedParentSku
       ? 'parent'
-      : selectedSupplier
-        ? 'supplier'
+      : selectedLieferant
+        ? 'lieferant'
         : 'overview';
 
   const primaryRows = useMemo(() => {
@@ -163,7 +163,7 @@ export function useDashboardAnalytics({
       case 'sku':
         return buildScopeRows(visibleSales, 'artikelposition', inventory, 1);
       case 'parent':
-      case 'supplier':
+      case 'lieferant':
         return buildScopeRows(visibleSales, 'artikelposition', inventory, 24);
       case 'overview':
         return buildScopeRows(visibleSales, 'parentSku', inventory, 18);
@@ -230,7 +230,7 @@ export function useDashboardAnalytics({
       .slice(0, 6);
   }, [skuRows]);
 
-  const meta = focusMeta(focusMode, selectedSku, selectedParentSku, selectedSupplier);
+  const meta = focusMeta(focusMode, selectedSku, selectedParentSku, selectedLieferant);
   const activeChips = useMemo(() => buildActiveChips(filters, dateWindowLabel), [dateWindowLabel, filters]);
 
   return {

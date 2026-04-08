@@ -54,7 +54,7 @@ export interface ScopeRow extends MetricSummary {
   key: string;
   label: string;
   parentSku: string | null;
-  supplier: string | null;
+  lieferant: string | null;
   productName: string | null;
   stockSellable: number;
   stockTotal: number;
@@ -163,29 +163,16 @@ function productForSale(sale: SaleRecord, catalog: CatalogData): Product | null 
   return catalog.products[sale.artikelposition] ?? null;
 }
 
-export function deriveChannel(sale: SaleRecord, product?: Product | null): string {
+export function deriveChannel(sale: SaleRecord): string {
   const group = sale.kundengruppe?.toLowerCase() ?? '';
   const email = sale.kundenEmail?.toLowerCase() ?? '';
-  const supplier = product?.supplier?.toLowerCase() ?? '';
 
   if (group.includes('retail')) {
     return 'Retail';
   }
 
   if (group.includes('amazon') || email.includes('amazon.')) {
-    if (supplier.includes('fbm')) {
-      return 'Amazon FBM';
-    }
-
-    if (supplier.includes('ft')) {
-      return 'Amazon FT';
-    }
-
     return 'Amazon';
-  }
-
-  if (supplier.includes('fbm')) {
-    return 'FBM Direct';
   }
 
   return 'Direct';
@@ -197,8 +184,8 @@ export function enrichSales(sales: SaleRecord[], catalog: CatalogData): Enriched
 
     return {
       ...sale,
-      channel: deriveChannel(sale, product),
-      supplier: product?.supplier ?? null,
+      channel: deriveChannel(sale),
+      lieferant: product?.lieferant ?? null,
       parentSku: product?.amaz_parent_sku ?? null,
       productName: product?.amaz_name ?? sale.produktbezeichnung ?? null,
     };
@@ -280,8 +267,8 @@ export function getGroupValue(sale: EnrichedSale, groupBy: GroupByKey): string {
       return sale.artikelposition ?? 'Unknown SKU';
     case 'parentSku':
       return sale.parentSku ?? 'Without Parent';
-    case 'supplier':
-      return sale.supplier ?? 'Unknown Supplier';
+    case 'lieferant':
+      return sale.lieferant ?? 'Без поставщика';
     case 'channel':
       return sale.channel;
     case 'status':
@@ -343,7 +330,7 @@ export function buildScopeRows(
     string,
     SummaryAccumulator & {
       parentSku: string | null;
-      supplier: string | null;
+      lieferant: string | null;
       productName: string | null;
       lastSaleDate: string | null;
     }
@@ -354,7 +341,7 @@ export function buildScopeRows(
     const existing = groups.get(key) ?? {
       ...createAccumulator(),
       parentSku: sale.parentSku,
-      supplier: sale.supplier,
+      lieferant: sale.lieferant,
       productName: sale.productName,
       lastSaleDate: sale.bestelldatum,
     };
@@ -365,8 +352,8 @@ export function buildScopeRows(
       existing.parentSku = sale.parentSku;
     }
 
-    if (!existing.supplier && sale.supplier) {
-      existing.supplier = sale.supplier;
+    if (!existing.lieferant && sale.lieferant) {
+      existing.lieferant = sale.lieferant;
     }
 
     if (!existing.productName && sale.productName) {
@@ -389,7 +376,7 @@ export function buildScopeRows(
         key,
         label: key,
         parentSku: accumulator.parentSku,
-        supplier: accumulator.supplier,
+        lieferant: accumulator.lieferant,
         productName: accumulator.productName,
         stockSellable: stock.sellable,
         stockTotal: stock.total,

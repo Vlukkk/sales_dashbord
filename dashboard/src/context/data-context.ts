@@ -11,7 +11,7 @@ export interface DataContextType {
 
 export const emptyData: DataContextType = {
   sales: [],
-  catalog: { products: {}, parentGroups: {}, suppliers: [] },
+  catalog: { products: {}, parentGroups: {}, lieferanten: [] },
   inventory: {
     records: {},
     totals: { sellable: 0, unsellable: 0, total: 0, skusWithStock: 0, trackedSkus: 0 },

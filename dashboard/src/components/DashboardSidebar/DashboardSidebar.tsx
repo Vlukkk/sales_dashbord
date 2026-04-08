@@ -36,12 +36,9 @@ export default function DashboardSidebar({
     [sales],
   );
   const channelOptions = useMemo(() => {
-    const values = sales.map((sale) => {
-      const product = sale.artikelposition ? catalog.products[sale.artikelposition] : null;
-      return deriveChannel(sale, product);
-    });
+    const values = sales.map((sale) => deriveChannel(sale));
     return [...new Set(values)].sort();
-  }, [sales, catalog]);
+  }, [sales]);
 
   return (
     <aside className="dashboard-sidebar">
@@ -105,9 +102,9 @@ export default function DashboardSidebar({
           <Select
             mode="multiple"
             allowClear
-            value={filters.supplier}
-            onChange={(value) => onFilterChange('supplier', value)}
-            options={catalog.suppliers.map((value) => ({ label: value, value }))}
+            value={filters.lieferant}
+            onChange={(value) => onFilterChange('lieferant', value)}
+            options={catalog.lieferanten.map((value) => ({ label: value, value }))}
             placeholder="Все поставщики"
             style={{ width: '100%' }}
             maxTagCount="responsive"

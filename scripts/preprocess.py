@@ -13,6 +13,7 @@ import openpyxl
 BASE_DIR = Path(__file__).resolve().parent.parent
 SALES_XML = BASE_DIR / "product - 2026-04-06T201032.237.xml"
 CATALOG_XLSX = BASE_DIR / "Выгрузка_DE.xlsx"
+LIEFERANT_XLSX = BASE_DIR / "SKU-Lieferant.xlsx"
 INVENTORY_TXT = BASE_DIR / "Lagerbestand+f&uuml;r+Versand+durch+Amazon_04-06-2026.txt"
 OUT_DIR = BASE_DIR / "dashboard" / "public" / "data"
 
@@ -73,7 +74,7 @@ PRODUCT_COLUMNS = [
     "amaz_name", "chain_length_google", "price", "amaz_price",
     "status", "amaz_chain_type", "chain_metal_type", "chain_metal_aloy",
     "chain_type", "chain_length", "chain_width", "product_type",
-    "amaz_metal_stamp", "supplier", "chain_weight",
+    "amaz_metal_stamp", "chain_weight",
     "earring_weight", "earring_diameter", "earring_type", "earring_width",
     "earring_fassung", "pendant_weight", "pendant_width", "pendant_height",
     "pendant_type", "pendant_metal_aloy", "pendant_metal_type",
@@ -172,7 +173,42 @@ def parse_sales():
     return sales
 
 
-def parse_catalog(sales_skus: Set[str]):
+def parse_lieferanten() -> Dict[str, str]:
+    """Загружает SKU → Lieferant маппинг из отдельного файла."""
+    if not LIEFERANT_XLSX.exists():
+        print(f"Lieferanten file not found: {LIEFERANT_XLSX}")
+        return {}
+
+    wb = openpyxl.load_workbook(LIEFERANT_XLSX, read_only=True, data_only=True)
+    ws = wb.active
+    rows_iter = ws.iter_rows(values_only=True)
+    header = next(rows_iter, None)
+    if not header:
+        wb.close()
+        return {}
+
+    sku_idx = 0
+    lf_idx = 1
+    for i, name in enumerate(header):
+        if name and str(name).strip().lower() == "sku":
+            sku_idx = i
+        if name and str(name).strip().lower() in ("lieferant", "supplier", "поставщик"):
+            lf_idx = i
+
+    mapping: Dict[str, str] = {}
+    for row in rows_iter:
+        if not row:
+            continue
+        sku = str(row[sku_idx]).strip() if row[sku_idx] is not None else ""
+        lf = str(row[lf_idx]).strip() if len(row) > lf_idx and row[lf_idx] is not None else ""
+        if sku and lf:
+            mapping[sku] = lf
+    wb.close()
+    print(f"Lieferanten: {len(mapping)} SKU → поставщик")
+    return mapping
+
+
+def parse_catalog(sales_skus: Set[str], lieferanten_map: Dict[str, str]):
     wb = openpyxl.load_workbook(CATALOG_XLSX, read_only=True, data_only=True)
     ws = wb.active
 
@@ -187,7 +223,7 @@ def parse_catalog(sales_skus: Set[str]):
 
     products = {}
     parent_groups = {}
-    suppliers = set()
+    lieferanten = set()
     total = 0
     matched = 0
 
@@ -230,11 +266,11 @@ def parse_catalog(sales_skus: Set[str]):
                     product[col_name] = str(val).strip()
             else:
                 product[col_name] = None
+        product["lieferant"] = lieferanten_map.get(sku)
         products[sku] = product
 
-        sup = product.get("supplier")
-        if sup:
-            suppliers.add(sup)
+        if product["lieferant"]:
+            lieferanten.add(product["lieferant"])
 
     wb.close()
 
@@ -269,6 +305,9 @@ def parse_catalog(sales_skus: Set[str]):
                         product[col_name] = str(val).strip()
                 else:
                     product[col_name] = None
+            product["lieferant"] = lieferanten_map.get(sku)
+            if product["lieferant"]:
+                lieferanten.add(product["lieferant"])
             products[sku] = product
         wb.close()
 
@@ -281,14 +320,14 @@ def parse_catalog(sales_skus: Set[str]):
     unmatched = sales_skus - set(products.keys())
     print(f"Catalog: {total} total rows, {len(products)} products exported")
     print(f"Parent groups: {len(relevant_parents)}")
-    print(f"Suppliers: {sorted(suppliers)}")
+    print(f"Lieferanten: {sorted(lieferanten)}")
     if unmatched:
         print(f"Unmatched sales SKUs: {sorted(unmatched)}")
 
     return {
         "products": products,
         "parentGroups": relevant_parents,
-        "suppliers": sorted(suppliers),
+        "lieferanten": sorted(lieferanten),
     }
 
 
@@ -343,7 +382,8 @@ def main():
     sales = parse_sales()
     sales_skus = {r["artikelposition"] for r in sales if r.get("artikelposition")}
 
-    catalog = parse_catalog(sales_skus)
+    lieferanten_map = parse_lieferanten()
+    catalog = parse_catalog(sales_skus, lieferanten_map)
     inventory = parse_inventory()
 
     with open(OUT_DIR / "sales.json", "w", encoding="utf-8") as f:

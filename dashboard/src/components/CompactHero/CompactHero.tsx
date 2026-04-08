@@ -140,11 +140,11 @@ function Donut({ slices }: { slices: { label: string; value: number; color: stri
 export default function CompactHero({ filteredSales, catalog, summary, inventorySummary, dateWindowLabel }: Props) {
   const daily = useMemo(() => buildDaily(filteredSales), [filteredSales]);
 
-  const topSuppliers = useMemo(() => {
+  const topLieferanten = useMemo(() => {
     const map = new Map<string, number>();
     for (const s of filteredSales) {
       const product = s.artikelposition ? catalog.products[s.artikelposition] : null;
-      const key = product?.supplier ?? 'Unknown';
+      const key = product?.lieferant ?? 'Без поставщика';
       map.set(key, (map.get(key) ?? 0) + (s.qtyOrdered ?? 0));
     }
     return Array.from(map.entries())
@@ -191,10 +191,10 @@ export default function CompactHero({ filteredSales, catalog, summary, inventory
             </div>
           </div>
           <div className="compact-chart">
-            <span className="compact-chart__label">Top suppliers</span>
-            <MiniBars data={topSuppliers} />
+            <span className="compact-chart__label">Top Lieferanten</span>
+            <MiniBars data={topLieferanten} />
             <div className="compact-chart__legend">
-              <span>{topSuppliers.length} suppliers</span>
+              <span>{topLieferanten.length} поставщиков</span>
             </div>
           </div>
           <div className="compact-chart compact-chart--donut">

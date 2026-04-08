@@ -27,3 +27,4 @@ Lagerbestand*.txt
 
 # Generated dashboard data contains customer/business data.
 dashboard/public/data/*.json
+reports/

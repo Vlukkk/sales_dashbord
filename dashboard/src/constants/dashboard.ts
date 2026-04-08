@@ -1,7 +1,7 @@
 import type { DashboardSettings, GroupOption, MetricOption } from '../types';
 
 export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
-  groupBy: 'supplier',
+  groupBy: 'lieferant',
   primaryMetric: 'revenue',
   secondaryMetric: 'profit',
 };
@@ -53,9 +53,9 @@ export const METRIC_OPTIONS: MetricOption[] = [
 
 export const GROUP_OPTIONS: GroupOption[] = [
   {
-    value: 'supplier',
-    label: 'Supplier',
-    hint: 'Aggregate by supplier mapping from the catalog',
+    value: 'lieferant',
+    label: 'Lieferant',
+    hint: 'Группировка по реальному поставщику (SKU-Lieferant)',
   },
   {
     value: 'artikelposition',
@@ -70,7 +70,7 @@ export const GROUP_OPTIONS: GroupOption[] = [
   {
     value: 'channel',
     label: 'Sales Channel',
-    hint: 'Derived from customer group, email, and supplier context',
+    hint: 'Derived from customer group and email',
   },
   {
     value: 'status',
