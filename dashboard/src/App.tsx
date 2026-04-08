@@ -41,6 +41,7 @@ export default function App() {
     <div className="app-shell">
       <DashboardSidebar
         sales={sales}
+        filteredSales={filteredSales}
         catalog={catalog}
         filters={filters}
         onFilterChange={updateFilter}

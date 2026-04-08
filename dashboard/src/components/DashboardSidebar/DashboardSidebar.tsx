@@ -1,14 +1,16 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Button, Collapse, DatePicker, Select } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { CatalogData, FilterState, SaleRecord } from '../../types';
 import { deriveChannel } from '../../utils/analytics';
+import SidebarLieferantPanel from './SidebarLieferantPanel';
 
 const { RangePicker } = DatePicker;
 
 interface Props {
   sales: SaleRecord[];
+  filteredSales: SaleRecord[];
   catalog: CatalogData;
   filters: FilterState;
   onFilterChange: <K extends keyof FilterState>(key: K, value: FilterState[K]) => void;
@@ -17,6 +19,7 @@ interface Props {
 
 export default function DashboardSidebar({
   sales,
+  filteredSales,
   catalog,
   filters,
   onFilterChange,
@@ -39,13 +42,19 @@ export default function DashboardSidebar({
     const values = sales.map((sale) => deriveChannel(sale));
     return [...new Set(values)].sort();
   }, [sales]);
+  const handleLieferantToggle = useCallback((lieferant: string) => {
+    const nextValues = filters.lieferant.includes(lieferant)
+      ? filters.lieferant.filter((value) => value !== lieferant)
+      : [...filters.lieferant, lieferant];
+
+    onFilterChange('lieferant', nextValues);
+  }, [filters.lieferant, onFilterChange]);
 
   return (
     <aside className="dashboard-sidebar">
       <div className="sidebar-brand">
         <span className="sidebar-brand__eyebrow">Jewelry Sales</span>
         <h1>Аналитика продаж</h1>
-        <p>Фильтруйте срез — графики и таблицы обновляются автоматически.</p>
       </div>
 
       <div>
@@ -162,6 +171,17 @@ export default function DashboardSidebar({
           },
         ]}
       />
+
+      <div>
+        <div className="sidebar-section-title">Поставщики</div>
+        <SidebarLieferantPanel
+          sales={filteredSales}
+          catalog={catalog}
+          dateRange={filters.dateRange}
+          activeLieferanten={filters.lieferant}
+          onToggleLieferant={handleLieferantToggle}
+        />
+      </div>
 
       <Button icon={<ReloadOutlined />} className="sidebar-reset" onClick={onResetFilters}>
         Сбросить фильтры
