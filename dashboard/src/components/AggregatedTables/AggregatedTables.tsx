@@ -1,8 +1,11 @@
 import { useMemo } from 'react';
-import { Table } from 'antd';
+import { Button, Space, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { FileExcelOutlined, FileTextOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import type { CatalogData, EnrichedSale, FilterState, InventoryData, Product } from '../../types';
 import { buildScopeRows, type ScopeRow } from '../../utils/analytics';
+import { downloadCsv, downloadExcelWorkbook, type ExportColumn } from '../../utils/tableExport';
 
 interface Props {
   visibleSales: EnrichedSale[];
@@ -15,6 +18,16 @@ interface Props {
 const fmtNum = (v: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(v);
 const fmtMoney = (v: number) =>
   new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(v);
+
+const EXPORT_COLUMNS: ExportColumn<ScopeRow>[] = [
+  { key: 'label', header: 'Позиция', type: 'string', width: 120, value: (row) => row.label },
+  { key: 'lieferant', header: 'Поставщик', type: 'string', width: 140, value: (row) => row.lieferant ?? 'Без поставщика' },
+  { key: 'units', header: 'Продано', type: 'integer', width: 70, value: (row) => row.units },
+  { key: 'refundedUnits', header: 'Возвраты', type: 'integer', width: 70, value: (row) => row.refundedUnits },
+  { key: 'refundRate', header: '% возвр.', type: 'percent', width: 70, value: (row) => row.refundRate },
+  { key: 'revenue', header: 'Сумма продаж', type: 'currency', width: 90, value: (row) => row.revenue },
+  { key: 'stockSellable', header: 'FBA остаток', type: 'integer', width: 80, value: (row) => row.stockSellable },
+];
 
 function makeColumns(labelTitle: string): ColumnsType<ScopeRow> {
   return [
@@ -70,6 +83,37 @@ function makeColumns(labelTitle: string): ColumnsType<ScopeRow> {
       render: (v: number) => <span className="cell-num">{fmtNum(v)}</span>,
     },
   ];
+}
+
+function buildFilterSummary(filters: FilterState) {
+  const parts: string[] = [];
+
+  if (filters.dateRange) {
+    parts.push(`Дата: ${filters.dateRange[0]}..${filters.dateRange[1]}`);
+  }
+  if (filters.artikelposition) {
+    parts.push(`SKU: ${filters.artikelposition}`);
+  }
+  if (filters.parentSku.length > 0) {
+    parts.push(`Parent: ${filters.parentSku.join(', ')}`);
+  }
+  if (filters.lieferant.length > 0) {
+    parts.push(`Поставщик: ${filters.lieferant.join(', ')}`);
+  }
+  if (filters.status.length > 0) {
+    parts.push(`Статус: ${filters.status.join(', ')}`);
+  }
+  if (filters.channel.length > 0) {
+    parts.push(`Канал: ${filters.channel.join(', ')}`);
+  }
+  if (filters.kundengruppe.length > 0) {
+    parts.push(`Группа: ${filters.kundengruppe.join(', ')}`);
+  }
+  if (filters.bestellungNr.trim()) {
+    parts.push(`Заказ: ${filters.bestellungNr.trim()}`);
+  }
+
+  return parts.length > 0 ? parts.join(' | ') : 'Без дополнительных фильтров';
 }
 
 function hasSaleOnlyFilters(filters: FilterState) {
@@ -185,13 +229,61 @@ export default function AggregatedTables({ visibleSales, inventory, catalog, fil
     }
     return [...skuRows, ...stale];
   }, [skuRows, inventory, catalog, filters]);
+  const filterSummary = useMemo(() => buildFilterSummary(filters), [filters]);
+
+  const exportTable = (format: 'excel' | 'csv', labelTitle: string, rows: ScopeRow[]) => {
+    const filenameBase = `${labelTitle.toLowerCase()}-${dayjs().format('YYYY-MM-DD_HH-mm')}`;
+    const title = `${labelTitle} · экспорт таблицы`;
+
+    if (format === 'csv') {
+      downloadCsv({
+        filename: `${filenameBase}.csv`,
+        title,
+        worksheetName: labelTitle,
+        subtitle: filterSummary,
+        columns: [
+          { ...EXPORT_COLUMNS[0], header: labelTitle },
+          ...EXPORT_COLUMNS.slice(1),
+        ],
+        rows,
+      });
+      return;
+    }
+
+    downloadExcelWorkbook(`${filenameBase}.xls`, [{
+      title,
+      worksheetName: labelTitle,
+      subtitle: filterSummary,
+      columns: [
+        { ...EXPORT_COLUMNS[0], header: labelTitle },
+        ...EXPORT_COLUMNS.slice(1),
+      ],
+      rows,
+    }]);
+  };
 
   return (
     <div className="dashboard-main" style={{ display: 'grid', gap: 16 }}>
       <div className="card">
         <div className="card__header">
           <h3>SKU</h3>
-          <span className="card__meta">Клик по строке — карточка SKU</span>
+          <Space size={8} wrap>
+            <span className="card__meta">Клик по строке — карточка SKU</span>
+            <Button
+              size="small"
+              icon={<FileExcelOutlined />}
+              onClick={() => exportTable('excel', 'SKU', skuRowsWithStale)}
+            >
+              Excel
+            </Button>
+            <Button
+              size="small"
+              icon={<FileTextOutlined />}
+              onClick={() => exportTable('csv', 'SKU', skuRowsWithStale)}
+            >
+              CSV
+            </Button>
+          </Space>
         </div>
         <Table<ScopeRow>
           className="agg-table"
@@ -208,7 +300,23 @@ export default function AggregatedTables({ visibleSales, inventory, catalog, fil
       <div className="card">
         <div className="card__header">
           <h3>Parent</h3>
-          <span className="card__meta">Агрегация по parent SKU</span>
+          <Space size={8} wrap>
+            <span className="card__meta">Агрегация по parent SKU</span>
+            <Button
+              size="small"
+              icon={<FileExcelOutlined />}
+              onClick={() => exportTable('excel', 'Parent', parentRows)}
+            >
+              Excel
+            </Button>
+            <Button
+              size="small"
+              icon={<FileTextOutlined />}
+              onClick={() => exportTable('csv', 'Parent', parentRows)}
+            >
+              CSV
+            </Button>
+          </Space>
         </div>
         <Table<ScopeRow>
           className="agg-table"
