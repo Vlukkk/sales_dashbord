@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { ResponsiveLine } from '@nivo/line';
-import type { LineCustomSvgLayerProps } from '@nivo/line';
+import type { LineCustomSvgLayerProps, SliceTooltipProps } from '@nivo/line';
 import dayjs from 'dayjs';
 import type { EnrichedSale } from '../../types';
 import { summarizeSales } from '../../utils/analytics';
@@ -34,7 +34,6 @@ interface ChartSeries {
 
 const COLOR_SALES = '#6366f1';
 const COLOR_REFUNDS = '#f43f5e';
-const COLOR_POSITIVE = '#10b981';
 const REFUND_RATE_ALERT = 10;
 
 function buildDaily(sales: EnrichedSale[]): DailyPoint[] {
@@ -426,7 +425,7 @@ export default function SalesRefundChart({ title, sales }: Props) {
     ];
   }, [summaryCurrent, summaryPrevious]);
 
-  const renderTooltip = ({ slice }: { slice: { points: { data: { x: string | number } }[] } }) => {
+  const renderTooltip = ({ slice }: SliceTooltipProps<ChartSeries>) => {
     const x = String(slice.points[0].data.x);
     const point = dailyByDate.get(x);
     if (!point) return null;
