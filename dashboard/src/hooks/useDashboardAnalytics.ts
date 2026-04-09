@@ -13,7 +13,7 @@ import {
   buildScopeRows,
   enrichSales,
   getDateWindowLabel,
-  summarizeInventory,
+  summarizeInventoryForFilters,
   summarizeSales,
 } from '../utils/analytics';
 
@@ -156,7 +156,10 @@ export function useDashboardAnalytics({
   );
 
   const filteredSummary = useMemo(() => summarizeSales(visibleSales), [visibleSales]);
-  const inventorySummary = useMemo(() => summarizeInventory(visibleSales, inventory), [visibleSales, inventory]);
+  const inventorySummary = useMemo(
+    () => summarizeInventoryForFilters(catalog, inventory, filters),
+    [catalog, inventory, filters],
+  );
   const dateWindowLabel = useMemo(() => getDateWindowLabel(visibleSales), [visibleSales]);
 
   const selectedSku = filters.artikelposition || null;

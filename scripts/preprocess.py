@@ -154,6 +154,13 @@ def normalize_lieferant_name(val: Optional[str]) -> Optional[str]:
     return LIEFERANT_ALIASES.get(normalized.lower(), normalized)
 
 
+def make_placeholder_product(sku: str, lieferanten_map: Dict[str, str]) -> Dict[str, Any]:
+    product = {column: None for column in PRODUCT_COLUMNS}
+    product["sku"] = sku
+    product["lieferant"] = lieferanten_map.get(sku)
+    return product
+
+
 def parse_sales():
     tree = ET.parse(SALES_XML)
     root = tree.getroot()
@@ -250,13 +257,14 @@ def parse_lieferanten() -> Dict[str, str]:
     return mapping
 
 
-def parse_catalog(sales_skus: Set[str], lieferanten_map: Dict[str, str]):
+def parse_catalog(sales_skus: Set[str], inventory_skus: Set[str], lieferanten_map: Dict[str, str]):
     wb = openpyxl.load_workbook(CATALOG_XLSX, read_only=True, data_only=True)
     ws = wb.active
 
     rows_iter = ws.iter_rows(values_only=False)
     header_row = next(rows_iter)
     headers = [cell.value for cell in header_row]
+    relevant_skus = sales_skus | inventory_skus
 
     col_indices = {}
     for col_name in PRODUCT_COLUMNS:
@@ -286,10 +294,10 @@ def parse_catalog(sales_skus: Set[str], lieferanten_map: Dict[str, str]):
             if sku not in parent_groups[parent_sku]:
                 parent_groups[parent_sku].append(sku)
 
-        if sku not in sales_skus:
+        if sku not in relevant_skus:
             if parent_sku:
-                has_sales_sibling = any(s in sales_skus for s in parent_groups.get(parent_sku, []))
-                if not has_sales_sibling:
+                has_relevant_sibling = any(s in relevant_skus for s in parent_groups.get(parent_sku, []))
+                if not has_relevant_sibling:
                     continue
             else:
                 continue
@@ -319,7 +327,7 @@ def parse_catalog(sales_skus: Set[str], lieferanten_map: Dict[str, str]):
     # Second pass: include siblings of matched SKUs
     sibling_skus = set()
     for parent, children in parent_groups.items():
-        if any(c in sales_skus for c in children):
+        if any(c in relevant_skus for c in children):
             for c in children:
                 if c not in products:
                     sibling_skus.add(c)
@@ -353,16 +361,28 @@ def parse_catalog(sales_skus: Set[str], lieferanten_map: Dict[str, str]):
             products[sku] = product
         wb.close()
 
-    # Filter parent_groups to only those with sales-relevant children
+    missing_relevant = relevant_skus - set(products.keys())
+    for sku in sorted(missing_relevant):
+        product = make_placeholder_product(sku, lieferanten_map)
+        products[sku] = product
+        if product["lieferant"]:
+            lieferanten.add(product["lieferant"])
+
+    # Filter parent_groups to only those with sales/inventory-relevant children
     relevant_parents = {}
     for parent, children in parent_groups.items():
-        if any(c in sales_skus for c in children):
+        if any(c in relevant_skus for c in children):
             relevant_parents[parent] = children
 
     unmatched = sales_skus - set(products.keys())
+    inventory_only = inventory_skus - sales_skus
+    matched_inventory = inventory_skus & set(products.keys())
     print(f"Catalog: {total} total rows, {len(products)} products exported")
     print(f"Parent groups: {len(relevant_parents)}")
     print(f"Lieferanten: {sorted(lieferanten)}")
+    print(f"Inventory SKUs in catalog: {len(matched_inventory)}/{len(inventory_skus)}")
+    print(f"Inventory-only SKUs considered: {len(inventory_only)}")
+    print(f"Placeholder products added: {len(missing_relevant)}")
     if unmatched:
         print(f"Unmatched sales SKUs: {sorted(unmatched)}")
 
@@ -423,10 +443,11 @@ def main():
 
     sales = parse_sales()
     sales_skus = {r["artikelposition"] for r in sales if r.get("artikelposition")}
+    inventory = parse_inventory()
+    inventory_skus = set(inventory["records"].keys())
 
     lieferanten_map = parse_lieferanten()
-    catalog = parse_catalog(sales_skus, lieferanten_map)
-    inventory = parse_inventory()
+    catalog = parse_catalog(sales_skus, inventory_skus, lieferanten_map)
 
     with open(OUT_DIR / "sales.json", "w", encoding="utf-8") as f:
         json.dump(sales, f, ensure_ascii=False, indent=2)

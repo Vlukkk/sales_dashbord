@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import type {
   CatalogData,
   EnrichedSale,
+  FilterState,
   GroupByKey,
   InventoryData,
   MetricKey,
@@ -299,6 +300,65 @@ export function summarizeInventory(sales: EnrichedSale[], inventory: InventoryDa
     skusWithStock,
     lowStockSkus,
     trackedSkus: skus.size,
+  };
+}
+
+function matchesInventoryProductFilters(sku: string, product: Product | null, filters: FilterState) {
+  if (filters.artikelposition) {
+    const query = filters.artikelposition.toLowerCase();
+    if (!sku.toLowerCase().includes(query)) {
+      return false;
+    }
+  }
+
+  if (filters.parentSku.length > 0 && !filters.parentSku.includes(product?.amaz_parent_sku ?? '')) {
+    return false;
+  }
+
+  if (filters.lieferant.length > 0 && !filters.lieferant.includes(product?.lieferant ?? '')) {
+    return false;
+  }
+
+  return true;
+}
+
+export function summarizeInventoryForFilters(
+  catalog: CatalogData,
+  inventory: InventoryData,
+  filters: FilterState,
+): InventorySummary {
+  let sellable = 0;
+  let unsellable = 0;
+  let lowStockSkus = 0;
+  let skusWithStock = 0;
+  let trackedSkus = 0;
+
+  for (const [sku, record] of Object.entries(inventory.records)) {
+    const product = catalog.products[sku] ?? null;
+    if (!matchesInventoryProductFilters(sku, product, filters)) {
+      continue;
+    }
+
+    trackedSkus += 1;
+    sellable += record.sellable;
+    unsellable += record.unsellable;
+
+    if (record.sellable > 0) {
+      skusWithStock += 1;
+    }
+
+    if (record.sellable > 0 && record.sellable <= 3) {
+      lowStockSkus += 1;
+    }
+  }
+
+  return {
+    sellable,
+    unsellable,
+    total: sellable + unsellable,
+    skusWithStock,
+    lowStockSkus,
+    trackedSkus,
   };
 }
 

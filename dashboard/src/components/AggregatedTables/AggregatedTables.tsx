@@ -126,8 +126,11 @@ function hasSaleOnlyFilters(filters: FilterState) {
 }
 
 function matchesProductFilters(sku: string, product: Product | null, filters: FilterState) {
-  if (filters.artikelposition && sku !== filters.artikelposition) {
-    return false;
+  if (filters.artikelposition) {
+    const query = filters.artikelposition.toLowerCase();
+    if (!sku.toLowerCase().includes(query)) {
+      return false;
+    }
   }
 
   if (filters.parentSku.length > 0 && !filters.parentSku.includes(product?.amaz_parent_sku ?? '')) {
@@ -139,6 +142,20 @@ function matchesProductFilters(sku: string, product: Product | null, filters: Fi
   }
 
   return true;
+}
+
+function formatLieferantValues(values: Set<string>, fallback: string | null) {
+  const sorted = [...values].sort((left, right) => left.localeCompare(right));
+
+  if (sorted.length === 0) {
+    return fallback;
+  }
+
+  if (sorted.length <= 2) {
+    return sorted.join(', ');
+  }
+
+  return `${sorted.slice(0, 2).join(', ')} +${sorted.length - 2}`;
 }
 
 function sumInventoryForSkus(skus: string[], inventory: InventoryData) {
@@ -174,6 +191,92 @@ function withFullParentInventory(rows: ScopeRow[], catalog: CatalogData, invento
   });
 }
 
+function addStaleParentRows(rows: ScopeRow[], catalog: CatalogData, inventory: InventoryData, filters: FilterState) {
+  if (hasSaleOnlyFilters(filters)) {
+    return rows;
+  }
+
+  const known = new Set(rows.map((row) => row.key));
+  const staleGroups = new Map<
+    string,
+    {
+      key: string;
+      parentSku: string | null;
+      lieferant: string | null;
+      lieferanten: Set<string>;
+      stockSellable: number;
+      stockTotal: number;
+      skus: Set<string>;
+    }
+  >();
+
+  for (const [sku, record] of Object.entries(inventory.records)) {
+    if (record.sellable <= 0) {
+      continue;
+    }
+
+    const product = catalog.products[sku] ?? null;
+    if (!matchesProductFilters(sku, product, filters)) {
+      continue;
+    }
+
+    const parentKey = product?.amaz_parent_sku ?? 'Without Parent';
+    if (known.has(parentKey)) {
+      continue;
+    }
+
+    const current = staleGroups.get(parentKey) ?? {
+      key: parentKey,
+      parentSku: product?.amaz_parent_sku ?? null,
+      lieferant: product?.lieferant ?? null,
+      lieferanten: new Set<string>(product?.lieferant ? [product.lieferant] : []),
+      stockSellable: 0,
+      stockTotal: 0,
+      skus: new Set<string>(),
+    };
+
+    current.stockSellable += record.sellable;
+    current.stockTotal += record.total;
+    current.skus.add(sku);
+
+    if (!current.lieferant && product?.lieferant) {
+      current.lieferant = product.lieferant;
+    }
+
+    if (product?.lieferant) {
+      current.lieferanten.add(product.lieferant);
+    }
+
+    staleGroups.set(parentKey, current);
+  }
+
+  const staleRows: ScopeRow[] = [...staleGroups.values()].map((group) => ({
+    key: group.key,
+    label: group.key,
+    revenue: 0,
+    profit: 0,
+    orders: 0,
+    units: 0,
+    refunds: 0,
+    refundedUnits: 0,
+    refundOrders: 0,
+    margin: 0,
+    avgOrder: 0,
+    refundRate: 0,
+    activeSkus: group.skus.size,
+    rows: 0,
+    parentSku: group.parentSku,
+    lieferant: formatLieferantValues(group.lieferanten, group.lieferant),
+    productName: null,
+    stockSellable: group.stockSellable,
+    stockTotal: group.stockTotal,
+    lastSaleDate: null,
+    hasReturns: false,
+  }));
+
+  return [...rows, ...staleRows];
+}
+
 export default function AggregatedTables({ visibleSales, inventory, catalog, filters, onSelectSku }: Props) {
   const skuRows = useMemo(
     () => buildScopeRows(visibleSales, 'artikelposition', inventory, 500),
@@ -182,6 +285,10 @@ export default function AggregatedTables({ visibleSales, inventory, catalog, fil
   const parentRows = useMemo(
     () => withFullParentInventory(buildScopeRows(visibleSales, 'parentSku', inventory, 500), catalog, inventory),
     [visibleSales, inventory, catalog],
+  );
+  const parentRowsWithStale = useMemo(
+    () => addStaleParentRows(parentRows, catalog, inventory, filters),
+    [parentRows, catalog, inventory, filters],
   );
 
   // Add stale-stock rows: SKUs in inventory with stock > 0 but no sales in the current view.
@@ -305,14 +412,14 @@ export default function AggregatedTables({ visibleSales, inventory, catalog, fil
             <Button
               size="small"
               icon={<FileExcelOutlined />}
-              onClick={() => exportTable('excel', 'Parent', parentRows)}
+              onClick={() => exportTable('excel', 'Parent', parentRowsWithStale)}
             >
               Excel
             </Button>
             <Button
               size="small"
               icon={<FileTextOutlined />}
-              onClick={() => exportTable('csv', 'Parent', parentRows)}
+              onClick={() => exportTable('csv', 'Parent', parentRowsWithStale)}
             >
               CSV
             </Button>
@@ -321,7 +428,7 @@ export default function AggregatedTables({ visibleSales, inventory, catalog, fil
         <Table<ScopeRow>
           className="agg-table"
           rowKey="key"
-          dataSource={parentRows}
+          dataSource={parentRowsWithStale}
           columns={makeColumns('Parent')}
           pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (t) => `${t} строк` }}
           rowClassName={(r) => (r.stockSellable > 0 && r.units === 0 ? 'row--stale-stock' : '')}
