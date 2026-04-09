@@ -27,7 +27,12 @@ interface UseDashboardAnalyticsArgs {
   filters: FilterState;
 }
 
-function matchesFiltersExceptSku(sale: EnrichedSale, filters: FilterState) {
+interface MatchOptions {
+  ignoreDate?: boolean;
+  ignoreSku?: boolean;
+}
+
+function matchesFilters(sale: EnrichedSale, filters: FilterState, options: MatchOptions = {}) {
   if (filters.bestellungNr) {
     const query = filters.bestellungNr.toLowerCase();
     if (!sale.bestellungNr?.toLowerCase().includes(query)) {
@@ -43,7 +48,7 @@ function matchesFiltersExceptSku(sale: EnrichedSale, filters: FilterState) {
     return false;
   }
 
-  if (filters.dateRange) {
+  if (!options.ignoreDate && filters.dateRange) {
     const [from, to] = filters.dateRange;
     if (!sale.bestelldatum) {
       return false;
@@ -53,6 +58,10 @@ function matchesFiltersExceptSku(sale: EnrichedSale, filters: FilterState) {
     if (!date.isAfter(dayjs(from).subtract(1, 'day')) || !date.isBefore(dayjs(to).add(1, 'day'))) {
       return false;
     }
+  }
+
+  if (!options.ignoreSku && filters.artikelposition && sale.artikelposition !== filters.artikelposition) {
+    return false;
   }
 
   if (filters.kundengruppe.length > 0 && (!sale.kundengruppe || !filters.kundengruppe.includes(sale.kundengruppe))) {
@@ -141,6 +150,10 @@ export function useDashboardAnalytics({
 }: UseDashboardAnalyticsArgs) {
   const allSales = useMemo(() => enrichSales(sales, catalog), [sales, catalog]);
   const visibleSales = useMemo(() => enrichSales(filteredSales, catalog), [filteredSales, catalog]);
+  const comparisonSales = useMemo(
+    () => allSales.filter((sale) => matchesFilters(sale, filters, { ignoreDate: true })),
+    [allSales, filters],
+  );
 
   const filteredSummary = useMemo(() => summarizeSales(visibleSales), [visibleSales]);
   const inventorySummary = useMemo(() => summarizeInventory(visibleSales, inventory), [visibleSales, inventory]);
@@ -182,7 +195,7 @@ export function useDashboardAnalytics({
 
     return buildScopeRows(
       allSales.filter((sale) => {
-        if (!matchesFiltersExceptSku(sale, filters)) {
+        if (!matchesFilters(sale, filters, { ignoreSku: true })) {
           return false;
         }
 
@@ -235,6 +248,7 @@ export function useDashboardAnalytics({
 
   return {
     visibleSales,
+    comparisonSales,
     filteredSummary,
     inventorySummary,
     dateWindowLabel,

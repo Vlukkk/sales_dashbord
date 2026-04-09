@@ -85,6 +85,13 @@ function createAccumulator(): SummaryAccumulator {
   };
 }
 
+export interface PeriodComparison {
+  current: EnrichedSale[];
+  previous: EnrichedSale[];
+  from: string | null;
+  to: string | null;
+}
+
 function applySale(accumulator: SummaryAccumulator, sale: EnrichedSale) {
   accumulator.revenue += sale.totalInclTax ?? 0;
   accumulator.profit += sale.totalProfit ?? 0;
@@ -139,6 +146,59 @@ function startAndEndDays(sales: EnrichedSale[]) {
   return {
     from: dates[0] ?? fallback,
     to: dates[dates.length - 1] ?? fallback,
+  };
+}
+
+export function splitSalesCurrentAndPrevious(
+  currentSales: EnrichedSale[],
+  comparisonSales: EnrichedSale[],
+): PeriodComparison {
+  const dates = currentSales
+    .map((sale) => sale.bestelldatum?.slice(0, 10))
+    .filter((value): value is string => Boolean(value))
+    .sort();
+
+  if (dates.length === 0) {
+    return { current: currentSales, previous: [], from: null, to: null };
+  }
+
+  const from = dayjs(dates[0]);
+  const to = dayjs(dates[dates.length - 1]);
+  const spanDays = to.diff(from, 'day') + 1;
+  const previousFrom = from.subtract(spanDays, 'day');
+  const previousTo = from.subtract(1, 'day');
+
+  const current: EnrichedSale[] = [];
+  const previous: EnrichedSale[] = [];
+
+  for (const sale of comparisonSales) {
+    const day = sale.bestelldatum?.slice(0, 10);
+    if (!day) {
+      continue;
+    }
+
+    const date = dayjs(day);
+    if (
+      (date.isSame(from, 'day') || date.isAfter(from, 'day')) &&
+      (date.isSame(to, 'day') || date.isBefore(to, 'day'))
+    ) {
+      current.push(sale);
+      continue;
+    }
+
+    if (
+      (date.isSame(previousFrom, 'day') || date.isAfter(previousFrom, 'day')) &&
+      (date.isSame(previousTo, 'day') || date.isBefore(previousTo, 'day'))
+    ) {
+      previous.push(sale);
+    }
+  }
+
+  return {
+    current,
+    previous,
+    from: from.format('YYYY-MM-DD'),
+    to: to.format('YYYY-MM-DD'),
   };
 }
 
