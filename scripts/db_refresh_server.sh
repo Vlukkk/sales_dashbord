@@ -30,6 +30,16 @@ echo "Sales data dir: $SALES_DATA_DIR"
 echo "Master data dir: $MASTER_DATA_DIR"
 echo "Inventory data dir: $INVENTORY_DATA_DIR"
 
+echo "==> Ensure Python environment"
+if [ ! -d "$VENV_DIR" ]; then
+  python3 -m venv "$VENV_DIR"
+fi
+
+# shellcheck source=/dev/null
+. "$VENV_DIR/bin/activate"
+pip install --quiet --upgrade pip
+pip install --quiet --upgrade openpyxl "psycopg[binary]"
+
 echo "==> Validate required source files"
 RAW_DATA_DIR="$RAW_DATA_DIR" \
 SALES_DATA_DIR="$SALES_DATA_DIR" \
@@ -56,16 +66,6 @@ for label, path in (
         print(f"Missing required file: {path}", file=sys.stderr)
         sys.exit(1)
 PY
-
-echo "==> Ensure Python environment"
-if [ ! -d "$VENV_DIR" ]; then
-  python3 -m venv "$VENV_DIR"
-fi
-
-# shellcheck source=/dev/null
-. "$VENV_DIR/bin/activate"
-pip install --quiet --upgrade pip
-pip install --quiet --upgrade openpyxl "psycopg[binary]"
 
 echo "==> Ensure Docker is available"
 docker info >/dev/null
