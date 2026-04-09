@@ -59,6 +59,12 @@ cd /srv/sales_dashbord
 
 Nginx serves `/var/www/sales-dashboard` on port `8080` with Basic Auth enabled.
 
+## PostgreSQL server refresh
+
+DB-backed refresh flow is documented separately:
+
+- [docs/server-db-refresh.md](docs/server-db-refresh.md)
+
 Manual fallback:
 
 ```bash

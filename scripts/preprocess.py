@@ -3,6 +3,7 @@
 
 import csv
 import json
+import os
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -11,10 +12,10 @@ from typing import Optional, Set, Dict, List, Any
 import openpyxl
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SALES_XML = BASE_DIR / "product - 2026-04-06T201032.237.xml"
-CATALOG_XLSX = BASE_DIR / "Выгрузка_DE.xlsx"
-LIEFERANT_XLSX = BASE_DIR / "SKU-Lieferant.xlsx"
-INVENTORY_TXT = BASE_DIR / "Lagerbestand+f&uuml;r+Versand+durch+Amazon_04-06-2026.txt"
+RAW_DATA_DIR = Path(os.environ.get("RAW_DATA_DIR", BASE_DIR / "raw"))
+DATA_DIR = Path(os.environ.get("SALES_DATA_DIR", BASE_DIR / "data"))
+MASTER_DATA_DIR = Path(os.environ.get("MASTER_DATA_DIR", RAW_DATA_DIR / "master"))
+INVENTORY_DATA_DIR = Path(os.environ.get("INVENTORY_DATA_DIR", RAW_DATA_DIR / "inventory"))
 OUT_DIR = BASE_DIR / "dashboard" / "public" / "data"
 
 NS = {"ss": "urn:schemas-microsoft-com:office:spreadsheet"}
@@ -84,6 +85,75 @@ PRODUCT_COLUMNS = [
 LIEFERANT_ALIASES = {
     "top gold": "Top Gold",
 }
+
+
+def discover_sales_xml_files() -> List[Path]:
+    data_candidates = sorted(DATA_DIR.glob("product - *.xml"))
+    if data_candidates:
+        return data_candidates
+
+    return sorted(BASE_DIR.glob("product - *.xml"))
+
+
+def resolve_latest_sales_xml() -> Path:
+    candidates = discover_sales_xml_files()
+    if not candidates:
+        raise FileNotFoundError(
+            f"No sales XML files found in {DATA_DIR} or {BASE_DIR}"
+        )
+    return candidates[-1]
+
+
+def resolve_existing_path(env_name: str, candidates: List[Path]) -> Path:
+    override = os.environ.get(env_name)
+    if override:
+        path = Path(override)
+        if not path.exists():
+            raise FileNotFoundError(f"{env_name} points to missing file: {path}")
+        return path
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    raise FileNotFoundError(
+        f"No existing file found for {env_name}. Tried: {', '.join(str(path) for path in candidates)}"
+    )
+
+
+def discover_inventory_txt_files() -> List[Path]:
+    inventory_candidates = sorted(INVENTORY_DATA_DIR.glob("Lagerbestand*.txt"))
+    if inventory_candidates:
+        return inventory_candidates
+
+    return sorted(BASE_DIR.glob("Lagerbestand*.txt"))
+
+
+def resolve_latest_inventory_txt() -> Path:
+    candidates = discover_inventory_txt_files()
+    if not candidates:
+        raise FileNotFoundError(
+            f"No inventory TXT files found in {INVENTORY_DATA_DIR} or {BASE_DIR}"
+        )
+    return candidates[-1]
+
+
+CATALOG_XLSX = resolve_existing_path(
+    "CATALOG_XLSX_PATH",
+    [
+        MASTER_DATA_DIR / "Выгрузка_DE.xlsx",
+        BASE_DIR / "Выгрузка_DE.xlsx",
+    ],
+)
+LIEFERANT_XLSX = resolve_existing_path(
+    "LIEFERANT_XLSX_PATH",
+    [
+        MASTER_DATA_DIR / "SKU-Lieferant.xlsx",
+        BASE_DIR / "SKU-Lieferant.xlsx",
+    ],
+)
+SALES_XML = resolve_latest_sales_xml()
+INVENTORY_TXT = resolve_latest_inventory_txt()
 
 
 def parse_money(val: Optional[str]) -> Optional[float]:
@@ -161,8 +231,9 @@ def make_placeholder_product(sku: str, lieferanten_map: Dict[str, str]) -> Dict[
     return product
 
 
-def parse_sales():
-    tree = ET.parse(SALES_XML)
+def parse_sales(source_path: Optional[Path] = None):
+    source_file = source_path or SALES_XML
+    tree = ET.parse(source_file)
     root = tree.getroot()
     worksheet = root.findall(".//ss:Worksheet", NS)[0]
     table = worksheet.find("ss:Table", NS)
@@ -218,7 +289,10 @@ def parse_sales():
                 record[camel_key] = val
         sales.append(record)
 
-    print(f"Sales: {len(sales)} rows loaded, {filtered_90} filtered (90*), {skipped_summary} summary rows skipped")
+    print(
+        f"Sales: {len(sales)} rows loaded from {source_file.name}, "
+        f"{filtered_90} filtered (90*), {skipped_summary} summary rows skipped"
+    )
     return sales
 
 
@@ -440,6 +514,11 @@ def parse_inventory():
 
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    print(f"Sales source: {SALES_XML}")
+    print(f"Catalog source: {CATALOG_XLSX}")
+    print(f"Lieferanten source: {LIEFERANT_XLSX}")
+    print(f"Inventory source: {INVENTORY_TXT}")
 
     sales = parse_sales()
     sales_skus = {r["artikelposition"] for r in sales if r.get("artikelposition")}

@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sales-dashboard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sales_dashboard
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_sales_dashboard:/var/lib/postgresql/data
+
+volumes:
+  postgres_sales_dashboard:
