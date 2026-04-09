@@ -51,6 +51,7 @@ export default function App() {
       <main className="dashboard-main">
         <Overview
           visibleSales={analytics.visibleSales}
+          comparisonSales={analytics.comparisonSales}
           summary={analytics.filteredSummary}
           inventorySummary={analytics.inventorySummary}
           filters={filters}
