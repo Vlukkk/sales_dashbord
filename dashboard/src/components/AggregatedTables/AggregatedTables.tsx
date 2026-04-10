@@ -15,6 +15,7 @@ interface Props {
   visibleSales?: EnrichedSale[];
   skuRows?: ScopeRow[];
   parentRows?: ScopeRow[];
+  enabled?: boolean;
   onSelectSku: (sku: string) => void;
 }
 
@@ -341,6 +342,7 @@ export default function AggregatedTables({
   filters,
   skuRows,
   parentRows,
+  enabled = true,
   onSelectSku,
 }: Props) {
   const isApiMode = import.meta.env.VITE_DATA_SOURCE === 'api';
@@ -443,29 +445,29 @@ export default function AggregatedTables({
   }, [filters]);
 
   useEffect(() => {
-    if (!isApiMode) {
+    if (!isApiMode || !enabled) {
       return;
     }
 
     setSkuTable((prev) => ({ ...prev, page: 1 }));
     setParentTable((prev) => ({ ...prev, page: 1 }));
-  }, [filterKey, isApiMode]);
+  }, [enabled, filterKey, isApiMode]);
 
   useEffect(() => {
-    if (!isApiMode) {
+    if (!isApiMode || !enabled) {
       return;
     }
 
     void loadTable('artikelposition', skuTable.page, skuTable.pageSize, setSkuTable);
-  }, [isApiMode, loadTable, skuTable.page, skuTable.pageSize, filterKey]);
+  }, [enabled, isApiMode, loadTable, skuTable.page, skuTable.pageSize, filterKey]);
 
   useEffect(() => {
-    if (!isApiMode) {
+    if (!isApiMode || !enabled) {
       return;
     }
 
     void loadTable('parentSku', parentTable.page, parentTable.pageSize, setParentTable);
-  }, [isApiMode, loadTable, parentTable.page, parentTable.pageSize, filterKey]);
+  }, [enabled, isApiMode, loadTable, parentTable.page, parentTable.pageSize, filterKey]);
 
   const exportTable = async (format: 'excel' | 'csv', labelTitle: string, rows: ScopeRow[], groupBy?: ScopeGroupBy) => {
     const filenameBase = `${labelTitle.toLowerCase()}-${dayjs().format('YYYY-MM-DD_HH-mm')}`;
@@ -530,7 +532,7 @@ export default function AggregatedTables({
           rowKey="key"
           dataSource={displayedSkuRows}
           columns={makeColumns('SKU')}
-          loading={isApiMode ? skuTable.loading : undefined}
+          loading={isApiMode ? (!enabled || skuTable.loading) : undefined}
           pagination={isApiMode
             ? {
               current: skuTable.page,
@@ -577,7 +579,7 @@ export default function AggregatedTables({
           rowKey="key"
           dataSource={displayedParentRows}
           columns={makeColumns('Parent')}
-          loading={isApiMode ? parentTable.loading : undefined}
+          loading={isApiMode ? (!enabled || parentTable.loading) : undefined}
           pagination={isApiMode
             ? {
               current: parentTable.page,

@@ -108,19 +108,12 @@ function ApiDashboardApp() {
         filters={filters}
         filterOptions={filterOptions}
         lieferantSeries={dashboard.lieferantSeries}
+        lieferantLoading={dashboard.lieferantLoading}
         onFilterChange={updateFilter}
         onResetFilters={resetFilters}
       />
 
       <main className="dashboard-main">
-        {dashboard.loading && !dashboard.initialized && (
-          <div className="card">
-            <div className="app-state" style={{ minHeight: 120 }}>
-              <Spin size="large" />
-            </div>
-          </div>
-        )}
-
         <Overview
           mode="api"
           summary={dashboard.summary}
@@ -135,6 +128,7 @@ function ApiDashboardApp() {
           inventory={inventory}
           catalog={catalog}
           filters={filters}
+          enabled={dashboard.initialized}
           onSelectSku={setSelectedSku}
         />
       </main>

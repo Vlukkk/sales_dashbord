@@ -119,6 +119,24 @@ interface DailyPoint {
   refundRevenue: number;
 }
 
+interface ChartSeriesPayload {
+  points: DailyPoint[];
+  summary: MetricSummary;
+  previousSummary: MetricSummary | null;
+  from: string | null;
+  to: string | null;
+}
+
+interface DashboardOverviewPayload {
+  current: MetricSummary;
+  previous: MetricSummary | null;
+  inventorySummary: InventorySummary;
+  amazonSeries: ChartSeriesPayload;
+  retailSeries: ChartSeriesPayload;
+}
+
+type ScopeGroupBy = 'artikelposition' | 'parentSku';
+
 const SUMMARY_SELECT = `
   COALESCE(NULLIF(COUNT(DISTINCT s.order_number), 0), COUNT(*)) AS orders,
   COALESCE(SUM(s.qty_ordered), 0) AS units,
@@ -218,6 +236,141 @@ function fillDateGaps(points: DailyPoint[], from: string | null, to: string | nu
   return result;
 }
 
+function hasSaleOnlyFilters(filters: DashboardFilterParams) {
+  return Boolean(
+    filters.bestellungNr
+    || (filters.status && filters.status.length > 0)
+    || (filters.channel && filters.channel.length > 0)
+    || (filters.kundengruppe && filters.kundengruppe.length > 0),
+  );
+}
+
+function formatLieferantLabel(values: string[]) {
+  const sorted = [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right));
+
+  if (sorted.length === 0) {
+    return null;
+  }
+
+  if (sorted.length <= 2) {
+    return sorted.join(', ');
+  }
+
+  return `${sorted.slice(0, 2).join(', ')} +${sorted.length - 2}`;
+}
+
+function sortScopeRows(rows: ScopeRow[]) {
+  return [...rows].sort((left, right) => {
+    if (right.units !== left.units) {
+      return right.units - left.units;
+    }
+
+    if (right.orders !== left.orders) {
+      return right.orders - left.orders;
+    }
+
+    return right.revenue - left.revenue;
+  });
+}
+
+async function fetchInventoryOnlyScopeRows(filters: DashboardFilterParams, groupBy: ScopeGroupBy): Promise<ScopeRow[]> {
+  if (hasSaleOnlyFilters(filters)) {
+    return [];
+  }
+
+  const clause = buildInventoryFilterClause(filters);
+
+  if (groupBy === 'parentSku') {
+    const result = await pool.query<{
+      key: string;
+      parent_sku: string | null;
+      lieferanten: string[] | null;
+      stock_sellable: number;
+      stock_total: number;
+      active_skus: number;
+    }>(`
+      SELECT
+        COALESCE(sk.parent_sku, 'Without Parent') AS key,
+        MAX(sk.parent_sku) AS parent_sku,
+        ARRAY_REMOVE(ARRAY_AGG(DISTINCT sup.name ORDER BY sup.name), NULL) AS lieferanten,
+        COALESCE(SUM(i.sellable_qty), 0) AS stock_sellable,
+        COALESCE(SUM(i.sellable_qty + i.unsellable_qty), 0) AS stock_total,
+        COUNT(*) AS active_skus
+      ${INVENTORY_JOINS}
+      ${clause.where ? `${clause.where} AND i.sellable_qty > 0` : 'WHERE i.sellable_qty > 0'}
+      GROUP BY COALESCE(sk.parent_sku, 'Without Parent')
+    `, clause.params);
+
+    return result.rows.map((row) => ({
+      key: row.key,
+      label: row.key,
+      revenue: 0,
+      profit: 0,
+      orders: 0,
+      units: 0,
+      refunds: 0,
+      refundedUnits: 0,
+      refundOrders: 0,
+      margin: 0,
+      avgOrder: 0,
+      refundRate: 0,
+      activeSkus: Number(row.active_skus) || 0,
+      rows: 0,
+      parentSku: row.parent_sku,
+      lieferant: formatLieferantLabel(row.lieferanten ?? []),
+      productName: null,
+      stockSellable: Number(row.stock_sellable) || 0,
+      stockTotal: Number(row.stock_total) || 0,
+      lastSaleDate: null,
+      hasReturns: false,
+    }));
+  }
+
+  const result = await pool.query<{
+    key: string;
+    parent_sku: string | null;
+    lieferant: string | null;
+    product_name: string | null;
+    stock_sellable: number;
+    stock_total: number;
+  }>(`
+    SELECT
+      i.sku_code AS key,
+      MAX(sk.parent_sku) AS parent_sku,
+      MAX(sup.name) AS lieferant,
+      MAX(COALESCE(sk.title, sk.raw_attributes->>'amaz_name')) AS product_name,
+      MAX(i.sellable_qty) AS stock_sellable,
+      MAX(i.sellable_qty + i.unsellable_qty) AS stock_total
+    ${INVENTORY_JOINS}
+    ${clause.where ? `${clause.where} AND i.sellable_qty > 0` : 'WHERE i.sellable_qty > 0'}
+    GROUP BY i.sku_code
+  `, clause.params);
+
+  return result.rows.map((row) => ({
+    key: row.key,
+    label: row.key,
+    revenue: 0,
+    profit: 0,
+    orders: 0,
+    units: 0,
+    refunds: 0,
+    refundedUnits: 0,
+    refundOrders: 0,
+    margin: 0,
+    avgOrder: 0,
+    refundRate: 0,
+    activeSkus: 1,
+    rows: 0,
+    parentSku: row.parent_sku,
+    lieferant: row.lieferant,
+    productName: row.product_name,
+    stockSellable: Number(row.stock_sellable) || 0,
+    stockTotal: Number(row.stock_total) || 0,
+    lastSaleDate: null,
+    hasReturns: false,
+  }));
+}
+
 async function runSummary(filters: DashboardFilterParams, chartChannel?: string) {
   const clause = buildFilterClause(filters);
   const params = [...clause.params];
@@ -272,6 +425,70 @@ async function runDailySeries(filters: DashboardFilterParams, chartChannel?: str
     revenue: Number(row.revenue) || 0,
     refundRevenue: Number(row.refund_revenue) || 0,
   }));
+}
+
+async function buildSummaryPayload(filters: DashboardFilterParams, withComparison: boolean) {
+  const [current, inventorySummary] = await Promise.all([
+    runSummary(filters),
+    (async () => {
+      const inventoryClause = buildInventoryFilterClause(filters);
+      const inventorySql = `
+        SELECT
+          COALESCE(SUM(i.sellable_qty), 0) AS sellable,
+          COALESCE(SUM(i.unsellable_qty), 0) AS unsellable,
+          COUNT(*) FILTER (WHERE i.sellable_qty > 0) AS skus_with_stock,
+          COUNT(*) FILTER (WHERE i.sellable_qty > 0 AND i.sellable_qty <= 3) AS low_stock_skus,
+          COUNT(*) AS tracked_skus
+        ${INVENTORY_JOINS}
+        ${inventoryClause.where}
+      `;
+      const result = await pool.query(inventorySql, inventoryClause.params);
+      return buildInventorySummary(result.rows[0]);
+    })(),
+  ]);
+
+  let previous: MetricSummary | null = null;
+  if (withComparison && filters.dateFrom && filters.dateTo) {
+    const previousPeriod = computePreviousPeriod(filters.dateFrom, filters.dateTo);
+    previous = await runSummary({ ...filters, dateFrom: previousPeriod.from, dateTo: previousPeriod.to });
+  }
+
+  return {
+    current,
+    previous,
+    inventorySummary,
+  };
+}
+
+async function buildChartSeriesPayload(
+  filters: DashboardFilterParams,
+  withComparison: boolean,
+  chartChannel?: string,
+): Promise<ChartSeriesPayload> {
+  const [currentSummary, currentPointsRaw] = await Promise.all([
+    runSummary(filters, chartChannel),
+    runDailySeries(filters, chartChannel),
+  ]);
+
+  let previousSummary: MetricSummary | null = null;
+  if (withComparison && filters.dateFrom && filters.dateTo) {
+    const previousPeriod = computePreviousPeriod(filters.dateFrom, filters.dateTo);
+    previousSummary = await runSummary(
+      { ...filters, dateFrom: previousPeriod.from, dateTo: previousPeriod.to },
+      chartChannel,
+    );
+  }
+
+  const rangeFrom = filters.dateFrom ?? currentPointsRaw[0]?.date ?? null;
+  const rangeTo = filters.dateTo ?? currentPointsRaw[currentPointsRaw.length - 1]?.date ?? null;
+
+  return {
+    points: fillDateGaps(currentPointsRaw, rangeFrom, rangeTo),
+    summary: currentSummary,
+    previousSummary,
+    from: rangeFrom,
+    to: rangeTo,
+  };
 }
 
 export async function registerDashboardRoutes(app: FastifyInstance) {
@@ -517,36 +734,24 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     const filters = parseFilterParams(request);
     const query = request.query as Record<string, string | undefined>;
     const withComparison = query.withComparison === 'true' || query.withComparison === '1';
+    return buildSummaryPayload(filters, withComparison);
+  });
 
-    const [current, inventorySummary] = await Promise.all([
-      runSummary(filters),
-      (async () => {
-        const inventoryClause = buildInventoryFilterClause(filters);
-        const inventorySql = `
-          SELECT
-            COALESCE(SUM(i.sellable_qty), 0) AS sellable,
-            COALESCE(SUM(i.unsellable_qty), 0) AS unsellable,
-            COUNT(*) FILTER (WHERE i.sellable_qty > 0) AS skus_with_stock,
-            COUNT(*) FILTER (WHERE i.sellable_qty > 0 AND i.sellable_qty <= 3) AS low_stock_skus,
-            COUNT(*) AS tracked_skus
-          ${INVENTORY_JOINS}
-          ${inventoryClause.where}
-        `;
-        const result = await pool.query(inventorySql, inventoryClause.params);
-        return buildInventorySummary(result.rows[0]);
-      })(),
+  app.get('/api/dashboard/overview', async (request): Promise<DashboardOverviewPayload> => {
+    const filters = parseFilterParams(request);
+    const query = request.query as Record<string, string | undefined>;
+    const withComparison = query.withComparison === 'true' || query.withComparison === '1';
+
+    const [summary, amazonSeries, retailSeries] = await Promise.all([
+      buildSummaryPayload(filters, withComparison),
+      buildChartSeriesPayload(filters, withComparison, 'Amazon'),
+      buildChartSeriesPayload(filters, withComparison, 'Retail'),
     ]);
 
-    let previous: MetricSummary | null = null;
-    if (withComparison && filters.dateFrom && filters.dateTo) {
-      const previousPeriod = computePreviousPeriod(filters.dateFrom, filters.dateTo);
-      previous = await runSummary({ ...filters, dateFrom: previousPeriod.from, dateTo: previousPeriod.to });
-    }
-
     return {
-      current,
-      previous,
-      inventorySummary,
+      ...summary,
+      amazonSeries,
+      retailSeries,
     };
   });
 
@@ -555,31 +760,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     const query = request.query as Record<string, string | undefined>;
     const chartChannel = query.chartChannel;
     const withComparison = query.withComparison === 'true' || query.withComparison === '1';
-
-    const [currentSummary, currentPointsRaw] = await Promise.all([
-      runSummary(filters, chartChannel),
-      runDailySeries(filters, chartChannel),
-    ]);
-
-    let previousSummary: MetricSummary | null = null;
-    if (withComparison && filters.dateFrom && filters.dateTo) {
-      const previousPeriod = computePreviousPeriod(filters.dateFrom, filters.dateTo);
-      previousSummary = await runSummary(
-        { ...filters, dateFrom: previousPeriod.from, dateTo: previousPeriod.to },
-        chartChannel,
-      );
-    }
-
-    const rangeFrom = filters.dateFrom ?? currentPointsRaw[0]?.date ?? null;
-    const rangeTo = filters.dateTo ?? currentPointsRaw[currentPointsRaw.length - 1]?.date ?? null;
-
-    return {
-      points: fillDateGaps(currentPointsRaw, rangeFrom, rangeTo),
-      summary: currentSummary,
-      previousSummary,
-      from: rangeFrom,
-      to: rangeTo,
-    };
+    return buildChartSeriesPayload(filters, withComparison, chartChannel);
   });
 
   app.get('/api/dashboard/scope-rows', async (request) => {
@@ -589,9 +770,6 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 5000);
     const offset = Math.max(Number(query.offset) || 0, 0);
     const clause = buildFilterClause(filters);
-    const limitIndex = clause.params.length + 1;
-    const offsetIndex = clause.params.length + 2;
-
     const sql = groupBy === 'parentSku'
       ? `
         WITH scope AS (
@@ -610,8 +788,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         SELECT
           scope.*,
           COALESCE(inv.stock_sellable, 0) AS stock_sellable,
-          COALESCE(inv.stock_total, 0) AS stock_total,
-          COUNT(*) OVER() AS total_rows
+          COALESCE(inv.stock_total, 0) AS stock_total
         FROM scope
         LEFT JOIN LATERAL (
           SELECT
@@ -626,7 +803,6 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
           WHERE COALESCE(sk2.parent_sku, 'Without Parent') = scope.key
         ) inv ON TRUE
         ORDER BY scope.units DESC, scope.orders DESC, scope.revenue DESC
-        LIMIT $${limitIndex} OFFSET $${offsetIndex}
       `
       : `
         WITH scope AS (
@@ -645,8 +821,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         SELECT
           scope.*,
           COALESCE(inv.stock_sellable, 0) AS stock_sellable,
-          COALESCE(inv.stock_total, 0) AS stock_total,
-          COUNT(*) OVER() AS total_rows
+          COALESCE(inv.stock_total, 0) AS stock_total
         FROM scope
         LEFT JOIN LATERAL (
           SELECT
@@ -661,11 +836,14 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
           LIMIT 1
         ) inv ON TRUE
         ORDER BY scope.units DESC, scope.orders DESC, scope.revenue DESC
-        LIMIT $${limitIndex} OFFSET $${offsetIndex}
       `;
 
-    const result = await pool.query(sql, [...clause.params, limit, offset]);
-    const rows: ScopeRow[] = result.rows.map((row: Record<string, unknown>) => {
+    const [result, inventoryOnlyRows] = await Promise.all([
+      pool.query(sql, clause.params),
+      fetchInventoryOnlyScopeRows(filters, groupBy),
+    ]);
+
+    const salesRows: ScopeRow[] = result.rows.map((row: Record<string, unknown>) => {
       const summary = buildMetricSummary(row);
 
       return {
@@ -682,9 +860,15 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       };
     });
 
+    const knownKeys = new Set(salesRows.map((row) => row.key));
+    const rows = sortScopeRows([
+      ...salesRows,
+      ...inventoryOnlyRows.filter((row) => !knownKeys.has(row.key)),
+    ]);
+
     return {
-      rows,
-      total: Number(result.rows[0]?.total_rows) || 0,
+      rows: rows.slice(offset, offset + limit),
+      total: rows.length,
       limit,
       offset,
     };

@@ -37,6 +37,14 @@ interface ChartSeriesData {
   to: string | null;
 }
 
+interface DashboardOverviewResponse {
+  current: MetricSummary;
+  previous: MetricSummary | null;
+  inventorySummary: InventorySummary;
+  amazonSeries: ChartSeriesData;
+  retailSeries: ChartSeriesData;
+}
+
 interface DashboardDataState {
   summary: MetricSummary;
   previousSummary: MetricSummary | null;
@@ -46,6 +54,7 @@ interface DashboardDataState {
   lieferantSeries: LieferantSeries[];
   lieferantDateKeys: string[];
   loading: boolean;
+  lieferantLoading: boolean;
   initialized: boolean;
   error: string | null;
 }
@@ -67,6 +76,7 @@ const EMPTY_STATE: DashboardDataState = {
   lieferantSeries: [],
   lieferantDateKeys: [],
   loading: true,
+  lieferantLoading: true,
   initialized: false,
   error: null,
 };
@@ -91,7 +101,7 @@ export function useDashboardData(filters: FilterState) {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setState((prev) => ({ ...prev, loading: true, error: null }));
+    setState((prev) => ({ ...prev, loading: true, lieferantLoading: true, error: null }));
 
     try {
       const params = serializeFilters(currentFilters);
@@ -99,41 +109,58 @@ export function useDashboardData(filters: FilterState) {
       const prefix = queryString ? `?${queryString}&` : '?';
       const base = `${API_BASE}/api/dashboard`;
 
-      const [summaryRes, amazonRes, retailRes, lieferantRes] = await Promise.all([
-        fetchJson<{ current: MetricSummary; previous: MetricSummary | null; inventorySummary: InventorySummary }>(
-          `${base}/summary${prefix}withComparison=true`,
-          controller.signal,
-        ),
-        fetchJson<ChartSeriesData>(
-          `${base}/daily-series${prefix}withComparison=true&chartChannel=Amazon`,
-          controller.signal,
-        ),
-        fetchJson<ChartSeriesData>(
-          `${base}/daily-series${prefix}withComparison=true&chartChannel=Retail`,
-          controller.signal,
-        ),
-        fetchJson<{ series: LieferantSeries[]; dateKeys: string[] }>(
-          `${base}/lieferant-series${queryString ? `?${queryString}` : ''}`,
-          controller.signal,
-        ),
-      ]);
+      const lieferantPromise = fetchJson<{ series: LieferantSeries[]; dateKeys: string[] }>(
+        `${base}/lieferant-series${queryString ? `?${queryString}` : ''}`,
+        controller.signal,
+      )
+        .then((lieferantRes) => {
+          if (controller.signal.aborted) {
+            return;
+          }
+
+          setState((prev) => ({
+            ...prev,
+            lieferantSeries: lieferantRes.series,
+            lieferantDateKeys: lieferantRes.dateKeys,
+            lieferantLoading: false,
+          }));
+        })
+        .catch((error) => {
+          if (controller.signal.aborted) {
+            return;
+          }
+
+          console.error('Lieferant series fetch failed:', error);
+          setState((prev) => ({
+            ...prev,
+            lieferantSeries: [],
+            lieferantDateKeys: [],
+            lieferantLoading: false,
+          }));
+        });
+
+      const overviewRes = await fetchJson<DashboardOverviewResponse>(
+        `${base}/overview${prefix}withComparison=true`,
+        controller.signal,
+      );
 
       if (controller.signal.aborted) {
         return;
       }
 
-      setState({
-        summary: summaryRes.current,
-        previousSummary: summaryRes.previous,
-        inventorySummary: summaryRes.inventorySummary,
-        amazonSeries: amazonRes,
-        retailSeries: retailRes,
-        lieferantSeries: lieferantRes.series,
-        lieferantDateKeys: lieferantRes.dateKeys,
+      setState((prev) => ({
+        ...prev,
+        summary: overviewRes.current,
+        previousSummary: overviewRes.previous,
+        inventorySummary: overviewRes.inventorySummary,
+        amazonSeries: overviewRes.amazonSeries,
+        retailSeries: overviewRes.retailSeries,
         loading: false,
         initialized: true,
         error: null,
-      });
+      }));
+
+      void lieferantPromise;
     } catch (error) {
       if (controller.signal.aborted) {
         return;
@@ -142,6 +169,7 @@ export function useDashboardData(filters: FilterState) {
       setState((prev) => ({
         ...prev,
         loading: false,
+        lieferantLoading: false,
         initialized: prev.initialized,
         error: error instanceof Error ? error.message : 'Dashboard data fetch failed',
       }));

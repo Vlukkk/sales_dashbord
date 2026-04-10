@@ -15,6 +15,7 @@ interface Props {
   filteredSales?: SaleRecord[];
   filterOptions?: FilterOptions;
   lieferantSeries?: LieferantSeries[];
+  lieferantLoading?: boolean;
   onFilterChange: <K extends keyof FilterState>(key: K, value: FilterState[K]) => void;
   onResetFilters: () => void;
 }
@@ -26,6 +27,7 @@ export default function DashboardSidebar({
   filteredSales = [],
   filterOptions,
   lieferantSeries,
+  lieferantLoading = false,
   onFilterChange,
   onResetFilters,
 }: Props) {
@@ -228,6 +230,7 @@ export default function DashboardSidebar({
           catalog={catalog}
           dateRange={filters.dateRange}
           series={lieferantSeries}
+          loading={lieferantLoading}
           activeLieferanten={filters.lieferant}
           onToggleLieferant={handleLieferantToggle}
         />

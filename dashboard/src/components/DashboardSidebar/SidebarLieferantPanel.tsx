@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Segmented } from 'antd';
+import { Segmented, Spin } from 'antd';
 import dayjs from 'dayjs';
 import type { CatalogData, LieferantSeries, SaleRecord } from '../../types';
 import { formatMetricValue } from '../../utils/analytics';
@@ -11,6 +11,7 @@ interface Props {
   catalog: CatalogData;
   dateRange: [string, string] | null;
   series?: LieferantSeries[];
+  loading?: boolean;
   activeLieferanten: string[];
   onToggleLieferant: (lieferant: string) => void;
 }
@@ -148,6 +149,7 @@ export default function SidebarLieferantPanel({
   catalog,
   dateRange,
   series,
+  loading = false,
   activeLieferanten,
   onToggleLieferant,
 }: Props) {
@@ -171,6 +173,14 @@ export default function SidebarLieferantPanel({
   const overflowRows = rows.slice(6);
   const overflowContainsActive = overflowRows.some((row) => activeLieferanten.includes(row.lieferant));
   const overflowVisible = showOverflow || overflowContainsActive;
+
+  if (loading) {
+    return (
+      <div className="sidebar-lieferant-empty">
+        <Spin size="small" />
+      </div>
+    );
+  }
 
   if (rows.length === 0) {
     return <div className="sidebar-lieferant-empty">Нет данных по поставщикам в текущем срезе.</div>;
