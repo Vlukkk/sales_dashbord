@@ -118,6 +118,10 @@ cd /srv/sales_dashbord
 
 Если после `git pull` менялся сам backend-код, тогда backend-service нужно перезапустить отдельно.
 
+`systemd` setup для backend описан отдельно:
+
+- [docs/backend-systemd.md](backend-systemd.md)
+
 ## Daily Working Flow
 
 Обычный рабочий цикл:

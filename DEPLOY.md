@@ -64,6 +64,7 @@ Nginx serves `/var/www/sales-dashboard` on port `8080` with Basic Auth enabled.
 DB-backed refresh flow is documented separately:
 
 - [docs/server-db-refresh.md](docs/server-db-refresh.md)
+- [docs/backend-systemd.md](docs/backend-systemd.md)
 
 Manual fallback:
 
