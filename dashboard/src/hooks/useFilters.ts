@@ -3,7 +3,7 @@ import type { FilterState, SaleRecord, CatalogData } from '../types';
 import dayjs from 'dayjs';
 import { deriveChannel } from '../utils/analytics';
 
-const initialFilters: FilterState = {
+const emptyFilters: FilterState = {
   bestellungNr: '',
   status: [],
   channel: [],
@@ -14,14 +14,75 @@ const initialFilters: FilterState = {
   lieferant: [],
 };
 
+function isEmptyFilters(filters: FilterState) {
+  return (
+    filters.bestellungNr === ''
+    && filters.status.length === 0
+    && filters.channel.length === 0
+    && filters.dateRange === null
+    && filters.artikelposition === ''
+    && filters.kundengruppe.length === 0
+    && filters.parentSku.length === 0
+    && filters.lieferant.length === 0
+  );
+}
+
+function buildDefaultDateRange(sales: SaleRecord[]): [string, string] | null {
+  const dates = sales
+    .map((sale) => sale.bestelldatum)
+    .filter(Boolean)
+    .map((date) => dayjs(date))
+    .filter((date) => date.isValid());
+
+  if (dates.length === 0) {
+    return null;
+  }
+
+  const latestDate = dates.reduce((latest, current) => (
+    current.isAfter(latest) ? current : latest
+  ));
+  const anchorMonthEnd = latestDate.isSame(latestDate.endOf('month'), 'day')
+    ? latestDate.endOf('month')
+    : latestDate.subtract(1, 'month').endOf('month');
+  const from = anchorMonthEnd.subtract(2, 'month').startOf('month');
+  const to = anchorMonthEnd.endOf('month');
+
+  return [from.format('YYYY-MM-DD'), to.format('YYYY-MM-DD')];
+}
+
+function buildInitialFilters(sales: SaleRecord[]): FilterState {
+  return {
+    ...emptyFilters,
+    dateRange: buildDefaultDateRange(sales),
+  };
+}
+
 export function useFilters(sales: SaleRecord[], catalog: CatalogData) {
-  const [filters, setFilters] = useState<FilterState>(initialFilters);
+  const defaultFilters = useMemo(() => buildInitialFilters(sales), [sales]);
+  const [state, setState] = useState<{ filters: FilterState; initialized: boolean }>({
+    filters: emptyFilters,
+    initialized: false,
+  });
+  const filters = state.initialized || !isEmptyFilters(state.filters)
+    ? state.filters
+    : defaultFilters;
 
   const updateFilter = useCallback(<K extends keyof FilterState>(key: K, value: FilterState[K]) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
-  }, []);
+    setState((prev) => {
+      const baseFilters = prev.initialized || !isEmptyFilters(prev.filters)
+        ? prev.filters
+        : defaultFilters;
 
-  const resetFilters = useCallback(() => setFilters(initialFilters), []);
+      return {
+        initialized: true,
+        filters: { ...baseFilters, [key]: value },
+      };
+    });
+  }, [defaultFilters]);
+
+  const resetFilters = useCallback(() => {
+    setState({ initialized: true, filters: defaultFilters });
+  }, [defaultFilters]);
 
   const filteredSales = useMemo(() => {
     let result = sales;

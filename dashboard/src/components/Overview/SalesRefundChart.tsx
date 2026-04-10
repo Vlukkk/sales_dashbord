@@ -36,7 +36,7 @@ interface HoverState {
 type HoverHandler = (point: DailyPoint | null, event?: ReactMouseEvent<SVGRectElement>) => void;
 
 const COLOR_REVENUE = '#2563eb';
-const COLOR_SALES_BAR = '#93c5fd';
+const COLOR_SALES_BAR = COLOR_REVENUE;
 const COLOR_REFUNDS = '#e11d48';
 const REFUND_RATE_ALERT = 10;
 
@@ -436,8 +436,8 @@ function RevenueRefundChart({
       })}
 
       <path d={revenueArea} fill={`url(#${chartId}-revenue-fill)`} />
-      <path d={revenuePath} fill="none" stroke={COLOR_REVENUE} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d={refundPath} fill="none" stroke={COLOR_REFUNDS} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={revenuePath} fill="none" stroke={COLOR_REVENUE} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={refundPath} fill="none" stroke={COLOR_REFUNDS} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
 
       {points.map((point, index) => {
         const x = xAt(index, points.length, margin.left, innerWidth);
@@ -545,7 +545,7 @@ function UnitsRefundRateChart({
               height={barHeight}
               rx={5}
               fill={COLOR_SALES_BAR}
-              opacity="0.9"
+              opacity="0.82"
             />
 
             {salesLabels.has(index) && point.sales > 0 && (
@@ -557,7 +557,7 @@ function UnitsRefundRateChart({
         );
       })}
 
-      <path d={refundPath} fill="none" stroke={COLOR_REFUNDS} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={refundPath} fill="none" stroke={COLOR_REFUNDS} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
 
       {points.map((point, index) => {
         const x = xAt(index, points.length, margin.left, innerWidth);
