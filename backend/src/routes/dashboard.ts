@@ -319,10 +319,20 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     const supplierNames = new Set<string>();
 
     for (const row of skuResult.rows) {
-      const product = { ...(row.raw_attributes ?? {}) } as Record<string, unknown>;
-      product.sku = String(product.sku ?? row.sku_code);
-      product.amaz_parent_sku = row.parent_sku ?? product.amaz_parent_sku ?? null;
-      product.lieferant = row.supplier_name ?? product.lieferant ?? null;
+      const raw = row.raw_attributes ?? {};
+      const product: Record<string, unknown> = {
+        sku: String(raw.sku ?? row.sku_code),
+        sku_vender: raw.sku_vender ?? null,
+        purchase_price: raw.purchase_price ?? null,
+        amaz_parent_sku: row.parent_sku ?? raw.amaz_parent_sku ?? null,
+        amaz_name: raw.amaz_name ?? null,
+        chain_length: raw.chain_length ?? null,
+        product_type: raw.product_type ?? null,
+        amaz_metal_stamp: raw.amaz_metal_stamp ?? null,
+        lieferant: row.supplier_name ?? raw.lieferant ?? null,
+        amaz_price: raw.amaz_price ?? null,
+        status: raw.status ?? null,
+      };
       products[row.sku_code] = product;
 
       if (row.parent_sku) {
@@ -460,43 +470,85 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     const filters = parseFilterParams(request);
     const query = request.query as Record<string, string | undefined>;
     const groupBy = query.groupBy === 'parentSku' ? 'parentSku' : 'artikelposition';
-    const limit = Math.min(Math.max(Number(query.limit) || 500, 1), 2000);
+    const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 5000);
+    const offset = Math.max(Number(query.offset) || 0, 0);
     const clause = buildFilterClause(filters);
     const limitIndex = clause.params.length + 1;
+    const offsetIndex = clause.params.length + 2;
 
     const sql = groupBy === 'parentSku'
       ? `
+        WITH scope AS (
+          SELECT
+            COALESCE(sk.parent_sku, 'Without Parent') AS key,
+            COALESCE(sk.parent_sku, 'Without Parent') AS label,
+            MAX(sk.parent_sku) AS parent_sku,
+            NULLIF(ARRAY_TO_STRING(ARRAY_REMOVE(ARRAY_AGG(DISTINCT sup.name ORDER BY sup.name), NULL), ', '), '') AS lieferant,
+            NULL::text AS product_name,
+            MAX(s.order_date)::date::text AS last_sale_date,
+            ${SUMMARY_SELECT}
+          ${SALES_JOINS}
+          ${clause.where}
+          GROUP BY COALESCE(sk.parent_sku, 'Without Parent')
+        )
         SELECT
-          COALESCE(sk.parent_sku, 'Without Parent') AS key,
-          COALESCE(sk.parent_sku, 'Without Parent') AS label,
-          MAX(sk.parent_sku) AS parent_sku,
-          NULLIF(ARRAY_TO_STRING(ARRAY_REMOVE(ARRAY_AGG(DISTINCT sup.name ORDER BY sup.name), NULL), ', '), '') AS lieferant,
-          NULL::text AS product_name,
-          MAX(s.order_date)::date::text AS last_sale_date,
-          ${SUMMARY_SELECT}
-        ${SALES_JOINS}
-        ${clause.where}
-        GROUP BY COALESCE(sk.parent_sku, 'Without Parent')
-        ORDER BY units DESC, orders DESC, revenue DESC
-        LIMIT $${limitIndex}
+          scope.*,
+          COALESCE(inv.stock_sellable, 0) AS stock_sellable,
+          COALESCE(inv.stock_total, 0) AS stock_total,
+          COUNT(*) OVER() AS total_rows
+        FROM scope
+        LEFT JOIN LATERAL (
+          SELECT
+            COALESCE(SUM(i.sellable_qty), 0) AS stock_sellable,
+            COALESCE(SUM(i.sellable_qty + i.unsellable_qty), 0) AS stock_total
+          FROM inventory_snapshots i
+          JOIN (
+            SELECT MAX(snapshot_date) AS snapshot_date
+            FROM inventory_snapshots
+          ) latest ON latest.snapshot_date = i.snapshot_date
+          JOIN skus sk2 ON sk2.sku_code = i.sku_code
+          WHERE COALESCE(sk2.parent_sku, 'Without Parent') = scope.key
+        ) inv ON TRUE
+        ORDER BY scope.units DESC, scope.orders DESC, scope.revenue DESC
+        LIMIT $${limitIndex} OFFSET $${offsetIndex}
       `
       : `
+        WITH scope AS (
+          SELECT
+            s.sku_code AS key,
+            s.sku_code AS label,
+            MAX(sk.parent_sku) AS parent_sku,
+            MAX(sup.name) AS lieferant,
+            MAX(COALESCE(sk.title, sk.raw_attributes->>'amaz_name')) AS product_name,
+            MAX(s.order_date)::date::text AS last_sale_date,
+            ${SUMMARY_SELECT}
+          ${SALES_JOINS}
+          ${clause.where}
+          GROUP BY s.sku_code
+        )
         SELECT
-          s.sku_code AS key,
-          s.sku_code AS label,
-          MAX(sk.parent_sku) AS parent_sku,
-          MAX(sup.name) AS lieferant,
-          MAX(COALESCE(sk.title, sk.raw_attributes->>'amaz_name')) AS product_name,
-          MAX(s.order_date)::date::text AS last_sale_date,
-          ${SUMMARY_SELECT}
-        ${SALES_JOINS}
-        ${clause.where}
-        GROUP BY s.sku_code
-        ORDER BY units DESC, orders DESC, revenue DESC
-        LIMIT $${limitIndex}
+          scope.*,
+          COALESCE(inv.stock_sellable, 0) AS stock_sellable,
+          COALESCE(inv.stock_total, 0) AS stock_total,
+          COUNT(*) OVER() AS total_rows
+        FROM scope
+        LEFT JOIN LATERAL (
+          SELECT
+            i.sellable_qty AS stock_sellable,
+            i.sellable_qty + i.unsellable_qty AS stock_total
+          FROM inventory_snapshots i
+          JOIN (
+            SELECT MAX(snapshot_date) AS snapshot_date
+            FROM inventory_snapshots
+          ) latest ON latest.snapshot_date = i.snapshot_date
+          WHERE i.sku_code = scope.key
+          LIMIT 1
+        ) inv ON TRUE
+        ORDER BY scope.units DESC, scope.orders DESC, scope.revenue DESC
+        LIMIT $${limitIndex} OFFSET $${offsetIndex}
       `;
 
-    const result = await pool.query(sql, [...clause.params, limit]);
+    const result = await pool.query(sql, [...clause.params, limit, offset]);
     const rows: ScopeRow[] = result.rows.map((row: Record<string, unknown>) => {
       const summary = buildMetricSummary(row);
 
@@ -507,14 +559,19 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         parentSku: row.parent_sku as string | null,
         lieferant: row.lieferant as string | null,
         productName: row.product_name as string | null,
-        stockSellable: 0,
-        stockTotal: 0,
+        stockSellable: Number(row.stock_sellable) || 0,
+        stockTotal: Number(row.stock_total) || 0,
         lastSaleDate: row.last_sale_date as string | null,
         hasReturns: summary.refundedUnits > 0 || summary.refunds > 0,
       };
     });
 
-    return { rows };
+    return {
+      rows,
+      total: Number(result.rows[0]?.total_rows) || 0,
+      limit,
+      offset,
+    };
   });
 
   app.get('/api/dashboard/lieferant-series', async (request) => {

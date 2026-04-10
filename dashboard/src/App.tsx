@@ -85,7 +85,7 @@ function ApiDashboardApp() {
   const dashboard = useDashboardData(filters);
   const [selectedSku, setSelectedSku] = useState<string | null>(null);
 
-  if (loading || (!dashboard.initialized && dashboard.loading)) {
+  if (loading) {
     return (
       <div className="app-state">
         <Spin size="large" />
@@ -113,6 +113,14 @@ function ApiDashboardApp() {
       />
 
       <main className="dashboard-main">
+        {dashboard.loading && !dashboard.initialized && (
+          <div className="card">
+            <div className="app-state" style={{ minHeight: 120 }}>
+              <Spin size="large" />
+            </div>
+          </div>
+        )}
+
         <Overview
           mode="api"
           summary={dashboard.summary}
@@ -127,8 +135,6 @@ function ApiDashboardApp() {
           inventory={inventory}
           catalog={catalog}
           filters={filters}
-          skuRows={dashboard.skuRows}
-          parentRows={dashboard.parentRows}
           onSelectSku={setSelectedSku}
         />
       </main>

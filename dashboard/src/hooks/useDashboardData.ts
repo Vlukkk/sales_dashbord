@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DashboardDailyPoint, FilterState, LieferantSeries } from '../types';
-import type { InventorySummary, MetricSummary, ScopeRow } from '../utils/analytics';
+import type { InventorySummary, MetricSummary } from '../utils/analytics';
 import { serializeFilters } from './useServerFilters';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
@@ -43,8 +43,6 @@ interface DashboardDataState {
   inventorySummary: InventorySummary;
   amazonSeries: ChartSeriesData;
   retailSeries: ChartSeriesData;
-  skuRows: ScopeRow[];
-  parentRows: ScopeRow[];
   lieferantSeries: LieferantSeries[];
   lieferantDateKeys: string[];
   loading: boolean;
@@ -66,8 +64,6 @@ const EMPTY_STATE: DashboardDataState = {
   inventorySummary: EMPTY_INVENTORY_SUMMARY,
   amazonSeries: EMPTY_CHART_SERIES,
   retailSeries: EMPTY_CHART_SERIES,
-  skuRows: [],
-  parentRows: [],
   lieferantSeries: [],
   lieferantDateKeys: [],
   loading: true,
@@ -103,7 +99,7 @@ export function useDashboardData(filters: FilterState) {
       const prefix = queryString ? `?${queryString}&` : '?';
       const base = `${API_BASE}/api/dashboard`;
 
-      const [summaryRes, amazonRes, retailRes, skuRes, parentRes, lieferantRes] = await Promise.all([
+      const [summaryRes, amazonRes, retailRes, lieferantRes] = await Promise.all([
         fetchJson<{ current: MetricSummary; previous: MetricSummary | null; inventorySummary: InventorySummary }>(
           `${base}/summary${prefix}withComparison=true`,
           controller.signal,
@@ -114,14 +110,6 @@ export function useDashboardData(filters: FilterState) {
         ),
         fetchJson<ChartSeriesData>(
           `${base}/daily-series${prefix}withComparison=true&chartChannel=Retail`,
-          controller.signal,
-        ),
-        fetchJson<{ rows: ScopeRow[] }>(
-          `${base}/scope-rows${prefix}groupBy=artikelposition&limit=500`,
-          controller.signal,
-        ),
-        fetchJson<{ rows: ScopeRow[] }>(
-          `${base}/scope-rows${prefix}groupBy=parentSku&limit=500`,
           controller.signal,
         ),
         fetchJson<{ series: LieferantSeries[]; dateKeys: string[] }>(
@@ -140,8 +128,6 @@ export function useDashboardData(filters: FilterState) {
         inventorySummary: summaryRes.inventorySummary,
         amazonSeries: amazonRes,
         retailSeries: retailRes,
-        skuRows: skuRes.rows,
-        parentRows: parentRes.rows,
         lieferantSeries: lieferantRes.series,
         lieferantDateKeys: lieferantRes.dateKeys,
         loading: false,

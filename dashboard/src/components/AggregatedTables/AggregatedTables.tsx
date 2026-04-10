@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Space, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { FileExcelOutlined, FileTextOutlined } from '@ant-design/icons';
@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import type { CatalogData, EnrichedSale, FilterState, InventoryData, Product } from '../../types';
 import { buildScopeRows, type ScopeRow } from '../../utils/analytics';
 import { downloadCsv, downloadExcelWorkbook, type ExportColumn } from '../../utils/tableExport';
+import { serializeFilters } from '../../hooks/useServerFilters';
 
 interface Props {
   inventory: InventoryData;
@@ -16,6 +17,27 @@ interface Props {
   parentRows?: ScopeRow[];
   onSelectSku: (sku: string) => void;
 }
+
+type ScopeGroupBy = 'artikelposition' | 'parentSku';
+
+interface TableState {
+  rows: ScopeRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  loading: boolean;
+}
+
+type TableSetter = (value: TableState | ((prev: TableState) => TableState)) => void;
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+const INITIAL_TABLE_STATE: TableState = {
+  rows: [],
+  total: 0,
+  page: 1,
+  pageSize: 10,
+  loading: true,
+};
 
 const fmtNum = (v: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(v);
 const fmtMoney = (v: number) =>
@@ -279,6 +301,39 @@ function addStaleParentRows(rows: ScopeRow[], catalog: CatalogData, inventory: I
   return [...rows, ...staleRows];
 }
 
+async function fetchScopeRows(
+  filters: FilterState,
+  groupBy: ScopeGroupBy,
+  page: number,
+  pageSize: number,
+) {
+  const params = serializeFilters(filters);
+  params.set('groupBy', groupBy);
+  params.set('limit', String(pageSize));
+  params.set('offset', String((page - 1) * pageSize));
+
+  const response = await fetch(`${API_BASE}/api/dashboard/scope-rows?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error(`Table API error: ${response.status}`);
+  }
+
+  return response.json() as Promise<{ rows: ScopeRow[]; total: number }>;
+}
+
+async function fetchAllScopeRows(filters: FilterState, groupBy: ScopeGroupBy) {
+  const params = serializeFilters(filters);
+  params.set('groupBy', groupBy);
+  params.set('limit', '10000');
+  params.set('offset', '0');
+
+  const response = await fetch(`${API_BASE}/api/dashboard/scope-rows?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error(`Table export API error: ${response.status}`);
+  }
+
+  return response.json() as Promise<{ rows: ScopeRow[] }>;
+}
+
 export default function AggregatedTables({
   visibleSales,
   inventory,
@@ -288,6 +343,9 @@ export default function AggregatedTables({
   parentRows,
   onSelectSku,
 }: Props) {
+  const isApiMode = import.meta.env.VITE_DATA_SOURCE === 'api';
+  const [skuTable, setSkuTable] = useState<TableState>(INITIAL_TABLE_STATE);
+  const [parentTable, setParentTable] = useState<TableState>(INITIAL_TABLE_STATE);
   const resolvedSkuRows = useMemo(() => {
     if (skuRows) {
       return skuRows.map((row) => {
@@ -360,10 +418,59 @@ export default function AggregatedTables({
     return [...resolvedSkuRows, ...stale];
   }, [resolvedSkuRows, inventory, catalog, filters]);
   const filterSummary = useMemo(() => buildFilterSummary(filters), [filters]);
+  const filterKey = useMemo(() => serializeFilters(filters).toString(), [filters]);
 
-  const exportTable = (format: 'excel' | 'csv', labelTitle: string, rows: ScopeRow[]) => {
+  const loadTable = useCallback(async (
+    groupBy: ScopeGroupBy,
+    page: number,
+    pageSize: number,
+    setter: TableSetter,
+  ) => {
+    try {
+      setter((prev) => ({ ...prev, loading: true }));
+      const payload = await fetchScopeRows(filters, groupBy, page, pageSize);
+      setter({
+        rows: payload.rows,
+        total: payload.total,
+        page,
+        pageSize,
+        loading: false,
+      });
+    } catch (error) {
+      console.error(`Failed to load ${groupBy} rows:`, error);
+      setter((prev) => ({ ...prev, loading: false }));
+    }
+  }, [filters]);
+
+  useEffect(() => {
+    if (!isApiMode) {
+      return;
+    }
+
+    setSkuTable((prev) => ({ ...prev, page: 1 }));
+    setParentTable((prev) => ({ ...prev, page: 1 }));
+  }, [filterKey, isApiMode]);
+
+  useEffect(() => {
+    if (!isApiMode) {
+      return;
+    }
+
+    void loadTable('artikelposition', skuTable.page, skuTable.pageSize, setSkuTable);
+  }, [isApiMode, loadTable, skuTable.page, skuTable.pageSize, filterKey]);
+
+  useEffect(() => {
+    if (!isApiMode) {
+      return;
+    }
+
+    void loadTable('parentSku', parentTable.page, parentTable.pageSize, setParentTable);
+  }, [isApiMode, loadTable, parentTable.page, parentTable.pageSize, filterKey]);
+
+  const exportTable = async (format: 'excel' | 'csv', labelTitle: string, rows: ScopeRow[], groupBy?: ScopeGroupBy) => {
     const filenameBase = `${labelTitle.toLowerCase()}-${dayjs().format('YYYY-MM-DD_HH-mm')}`;
     const title = `${labelTitle} · экспорт таблицы`;
+    const exportRows = isApiMode && groupBy ? (await fetchAllScopeRows(filters, groupBy)).rows : rows;
 
     if (format === 'csv') {
       downloadCsv({
@@ -375,7 +482,7 @@ export default function AggregatedTables({
           { ...EXPORT_COLUMNS[0], header: labelTitle },
           ...EXPORT_COLUMNS.slice(1),
         ],
-        rows,
+        rows: exportRows,
       });
       return;
     }
@@ -388,9 +495,12 @@ export default function AggregatedTables({
         { ...EXPORT_COLUMNS[0], header: labelTitle },
         ...EXPORT_COLUMNS.slice(1),
       ],
-      rows,
+      rows: exportRows,
     }]);
   };
+
+  const displayedSkuRows = isApiMode ? skuTable.rows : skuRowsWithStale;
+  const displayedParentRows = isApiMode ? parentTable.rows : parentRowsWithStale;
 
   return (
     <div className="dashboard-main" style={{ display: 'grid', gap: 16 }}>
@@ -402,14 +512,14 @@ export default function AggregatedTables({
             <Button
               size="small"
               icon={<FileExcelOutlined />}
-              onClick={() => exportTable('excel', 'SKU', skuRowsWithStale)}
+              onClick={() => void exportTable('excel', 'SKU', displayedSkuRows, 'artikelposition')}
             >
               Excel
             </Button>
             <Button
               size="small"
               icon={<FileTextOutlined />}
-              onClick={() => exportTable('csv', 'SKU', skuRowsWithStale)}
+              onClick={() => void exportTable('csv', 'SKU', displayedSkuRows, 'artikelposition')}
             >
               CSV
             </Button>
@@ -418,9 +528,23 @@ export default function AggregatedTables({
         <Table<ScopeRow>
           className="agg-table"
           rowKey="key"
-          dataSource={skuRowsWithStale}
+          dataSource={displayedSkuRows}
           columns={makeColumns('SKU')}
-          pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (t) => `${t} строк` }}
+          loading={isApiMode ? skuTable.loading : undefined}
+          pagination={isApiMode
+            ? {
+              current: skuTable.page,
+              pageSize: skuTable.pageSize,
+              total: skuTable.total,
+              showSizeChanger: false,
+              showTotal: (t) => `${t} строк`,
+              onChange: (page, pageSize) => setSkuTable((prev) => ({
+                ...prev,
+                page,
+                pageSize: pageSize ?? prev.pageSize,
+              })),
+            }
+            : { pageSize: 10, showSizeChanger: false, showTotal: (t) => `${t} строк` }}
           rowClassName={(r) => (r.stockSellable > 0 && r.units === 0 ? 'row--stale-stock' : '')}
           onRow={(r) => ({ onClick: () => onSelectSku(r.key), style: { cursor: 'pointer' } })}
           size="middle"
@@ -435,14 +559,14 @@ export default function AggregatedTables({
             <Button
               size="small"
               icon={<FileExcelOutlined />}
-              onClick={() => exportTable('excel', 'Parent', parentRowsWithStale)}
+              onClick={() => void exportTable('excel', 'Parent', displayedParentRows, 'parentSku')}
             >
               Excel
             </Button>
             <Button
               size="small"
               icon={<FileTextOutlined />}
-              onClick={() => exportTable('csv', 'Parent', parentRowsWithStale)}
+              onClick={() => void exportTable('csv', 'Parent', displayedParentRows, 'parentSku')}
             >
               CSV
             </Button>
@@ -451,9 +575,23 @@ export default function AggregatedTables({
         <Table<ScopeRow>
           className="agg-table"
           rowKey="key"
-          dataSource={parentRowsWithStale}
+          dataSource={displayedParentRows}
           columns={makeColumns('Parent')}
-          pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (t) => `${t} строк` }}
+          loading={isApiMode ? parentTable.loading : undefined}
+          pagination={isApiMode
+            ? {
+              current: parentTable.page,
+              pageSize: parentTable.pageSize,
+              total: parentTable.total,
+              showSizeChanger: false,
+              showTotal: (t) => `${t} строк`,
+              onChange: (page, pageSize) => setParentTable((prev) => ({
+                ...prev,
+                page,
+                pageSize: pageSize ?? prev.pageSize,
+              })),
+            }
+            : { pageSize: 10, showSizeChanger: false, showTotal: (t) => `${t} строк` }}
           rowClassName={(r) => (r.stockSellable > 0 && r.units === 0 ? 'row--stale-stock' : '')}
           size="middle"
         />
