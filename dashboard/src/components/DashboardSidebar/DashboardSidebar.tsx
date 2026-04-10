@@ -42,6 +42,15 @@ export default function DashboardSidebar({
     const values = sales.map((sale) => deriveChannel(sale));
     return [...new Set(values)].sort();
   }, [sales]);
+  const quickYears = useMemo(() => {
+    const years = sales
+      .map((sale) => sale.bestelldatum?.slice(0, 4))
+      .filter(Boolean)
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value));
+    const anchorYear = years.length > 0 ? Math.max(...years) : dayjs().year();
+    return [anchorYear - 2, anchorYear - 1, anchorYear];
+  }, [sales]);
   const handleLieferantToggle = useCallback((lieferant: string) => {
     const nextValues = filters.lieferant.includes(lieferant)
       ? filters.lieferant.filter((value) => value !== lieferant)
@@ -49,6 +58,16 @@ export default function DashboardSidebar({
 
     onFilterChange('lieferant', nextValues);
   }, [filters.lieferant, onFilterChange]);
+  const isQuickYearActive = useCallback((year: number) => {
+    if (!filters.dateRange) {
+      return false;
+    }
+
+    return (
+      filters.dateRange[0] === dayjs().year(year).startOf('year').format('YYYY-MM-DD')
+      && filters.dateRange[1] === dayjs().year(year).endOf('year').format('YYYY-MM-DD')
+    );
+  }, [filters.dateRange]);
 
   return (
     <aside className="dashboard-sidebar">
@@ -62,6 +81,22 @@ export default function DashboardSidebar({
 
         <div className="sidebar-field">
           <div className="sidebar-label">Дата</div>
+          <div className="sidebar-year-shortcuts" role="group" aria-label="Быстрый выбор года">
+            {quickYears.map((year) => (
+              <Button
+                key={year}
+                size="small"
+                type={isQuickYearActive(year) ? 'primary' : 'default'}
+                className="sidebar-year-shortcuts__button"
+                onClick={() => onFilterChange('dateRange', [
+                  dayjs().year(year).startOf('year').format('YYYY-MM-DD'),
+                  dayjs().year(year).endOf('year').format('YYYY-MM-DD'),
+                ])}
+              >
+                {String(year).slice(-2)}
+              </Button>
+            ))}
+          </div>
           <RangePicker
             style={{ width: '100%' }}
             value={filters.dateRange ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])] : null}
