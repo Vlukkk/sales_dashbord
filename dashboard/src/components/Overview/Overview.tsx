@@ -1,15 +1,35 @@
-import { useMemo } from 'react';
-import type { EnrichedSale, FilterState } from '../../types';
-import { splitSalesCurrentAndPrevious, summarizeSales, type InventorySummary, type MetricSummary } from '../../utils/analytics';
+import type { DashboardDailyPoint, EnrichedSale, FilterState } from '../../types';
+import { summarizeSales, type InventorySummary, type MetricSummary, splitSalesCurrentAndPrevious } from '../../utils/analytics';
 import SalesRefundChart from './SalesRefundChart';
 
-interface Props {
+interface LegacyProps {
+  mode?: 'legacy';
   visibleSales: EnrichedSale[];
   comparisonSales: EnrichedSale[];
   summary: MetricSummary;
   inventorySummary: InventorySummary;
   filters: FilterState;
 }
+
+interface ApiChartSeries {
+  points: DashboardDailyPoint[];
+  summary: MetricSummary;
+  previousSummary: MetricSummary | null;
+  from: string | null;
+  to: string | null;
+}
+
+interface ApiProps {
+  mode: 'api';
+  summary: MetricSummary;
+  previousSummary: MetricSummary | null;
+  inventorySummary: InventorySummary;
+  filters: FilterState;
+  amazonSeries: ApiChartSeries;
+  retailSeries: ApiChartSeries;
+}
+
+type Props = LegacyProps | ApiProps;
 
 const fmtNum = (v: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(v);
 const fmtMoney = (v: number) =>
@@ -51,65 +71,153 @@ function DeltaBadge({
   );
 }
 
-export default function Overview({ visibleSales, comparisonSales, summary, inventorySummary, filters }: Props) {
-  const amazonSales = useMemo(
-    () =>
-      visibleSales.filter((s) => {
-        const g = s.kundengruppe?.toLowerCase() ?? '';
-        return g.includes('amazon') || s.channel.toLowerCase().includes('amazon');
-      }),
-    [visibleSales],
-  );
-  const amazonComparisonSales = useMemo(
-    () =>
-      comparisonSales.filter((s) => {
-        const g = s.kundengruppe?.toLowerCase() ?? '';
-        return g.includes('amazon') || s.channel.toLowerCase().includes('amazon');
-      }),
-    [comparisonSales],
-  );
+export default function Overview(props: Props) {
+  if (props.mode === 'api') {
+    const previousSummary = props.previousSummary ?? {
+      ...props.summary,
+      orders: 0,
+      units: 0,
+      refundedUnits: 0,
+      revenue: 0,
+      refunds: 0,
+      profit: 0,
+      refundOrders: 0,
+      margin: 0,
+      avgOrder: 0,
+      refundRate: 0,
+      activeSkus: 0,
+      rows: 0,
+    };
+    const refundRate = props.summary.units > 0 ? (props.summary.refundedUnits / props.summary.units) * 100 : 0;
+    const showSelectionHeadline = props.filters.parentSku.length > 0 || !!props.filters.artikelposition;
+    const selectionStats = {
+      skus: props.summary.activeSkus,
+      refunds: props.summary.refundedUnits,
+      revenue: props.summary.revenue,
+    };
 
-  const retailSales = useMemo(
-    () => visibleSales.filter((s) => (s.kundengruppe?.toLowerCase() ?? '').includes('retail')),
-    [visibleSales],
-  );
-  const retailComparisonSales = useMemo(
-    () => comparisonSales.filter((s) => (s.kundengruppe?.toLowerCase() ?? '').includes('retail')),
-    [comparisonSales],
-  );
+    return (
+      <>
+        <div className="bento">
+          <div className="bento__item">
+            <span className="bento__label">Заказы</span>
+            <span className="bento__value">{fmtNum(props.summary.orders)}</span>
+            <DeltaBadge value={computeRelativeDelta(props.summary.orders, previousSummary.orders)} />
+          </div>
+          <div className="bento__item">
+            <span className="bento__label">Продано, шт</span>
+            <span className="bento__value">{fmtNum(props.summary.units)}</span>
+            <DeltaBadge value={computeRelativeDelta(props.summary.units, previousSummary.units)} />
+          </div>
+          <div className="bento__item">
+            <span className="bento__label">Возвраты, шт</span>
+            <span className="bento__value">{fmtNum(props.summary.refundedUnits)}</span>
+            <span className="bento__note">{refundRate.toFixed(1)}% от продаж</span>
+            <DeltaBadge
+              value={props.previousSummary ? refundRate - previousSummary.refundRate : null}
+              inverted
+              suffix=" п.п."
+            />
+          </div>
+          <div className="bento__item">
+            <span className="bento__label">Сумма продаж</span>
+            <span className="bento__value">{fmtMoney(props.summary.revenue)}</span>
+            <DeltaBadge value={computeRelativeDelta(props.summary.revenue, previousSummary.revenue)} />
+          </div>
+          <div className="bento__item">
+            <span className="bento__label">FBA в продаже</span>
+            <span className="bento__value">{fmtNum(props.inventorySummary.sellable)}</span>
+            <span className="bento__note">{props.inventorySummary.skusWithStock} SKUs</span>
+          </div>
+          <div className="bento__item">
+            <span className="bento__label">Низкий остаток</span>
+            <span className="bento__value">{fmtNum(props.inventorySummary.lowStockSkus)}</span>
+            <span className="bento__note">SKUs ≤ 3 шт</span>
+          </div>
+        </div>
 
-  const showSelectionHeadline = filters.parentSku.length > 0 || !!filters.artikelposition;
-  const periodComparison = useMemo(
-    () => splitSalesCurrentAndPrevious(visibleSales, comparisonSales),
-    [visibleSales, comparisonSales],
-  );
-  const previousSummary = useMemo(() => summarizeSales(periodComparison.previous), [periodComparison.previous]);
+        {showSelectionHeadline && (
+          <div className="selection-headline">
+            <div className="selection-headline__item">
+              <span className="selection-headline__label">SKUs в выборке</span>
+              <span className="selection-headline__value">{fmtNum(selectionStats.skus)}</span>
+            </div>
+            <div className="selection-headline__item">
+              <span className="selection-headline__label">Возвраты</span>
+              <span className="selection-headline__value">{fmtNum(selectionStats.refunds)}</span>
+            </div>
+            <div className="selection-headline__item">
+              <span className="selection-headline__label">Сумма продаж</span>
+              <span className="selection-headline__value">{fmtMoney(selectionStats.revenue)}</span>
+            </div>
+          </div>
+        )}
 
-  const selectionStats = useMemo(() => {
-    const skus = new Set(visibleSales.map((s) => s.artikelposition).filter(Boolean) as string[]);
-    const refunds = visibleSales.reduce((acc, s) => acc + (s.qtyRefunded ?? 0), 0);
-    const revenue = visibleSales.reduce((acc, s) => acc + (s.totalInclTax ?? 0), 0);
+        <div className="chart-grid">
+          <SalesRefundChart
+            mode="api"
+            title="Amazon — продажи и возвраты"
+            points={props.amazonSeries.points}
+            summary={props.amazonSeries.summary}
+            previousSummary={props.amazonSeries.previousSummary}
+            from={props.amazonSeries.from}
+            to={props.amazonSeries.to}
+          />
+          <SalesRefundChart
+            mode="api"
+            title="Retail — продажи и возвраты"
+            points={props.retailSeries.points}
+            summary={props.retailSeries.summary}
+            previousSummary={props.retailSeries.previousSummary}
+            from={props.retailSeries.from}
+            to={props.retailSeries.to}
+          />
+        </div>
+      </>
+    );
+  }
+
+  const amazonSales = props.visibleSales.filter((sale) => {
+    const group = sale.kundengruppe?.toLowerCase() ?? '';
+    return group.includes('amazon') || sale.channel.toLowerCase().includes('amazon');
+  });
+  const amazonComparisonSales = props.comparisonSales.filter((sale) => {
+    const group = sale.kundengruppe?.toLowerCase() ?? '';
+    return group.includes('amazon') || sale.channel.toLowerCase().includes('amazon');
+  });
+
+  const retailSales = props.visibleSales.filter((sale) => (sale.kundengruppe?.toLowerCase() ?? '').includes('retail'));
+  const retailComparisonSales = props.comparisonSales.filter((sale) => (sale.kundengruppe?.toLowerCase() ?? '').includes('retail'));
+
+  const showSelectionHeadline = props.filters.parentSku.length > 0 || !!props.filters.artikelposition;
+  const periodComparison = splitSalesCurrentAndPrevious(props.visibleSales, props.comparisonSales);
+  const previousSummary = summarizeSales(periodComparison.previous);
+
+  const selectionStats = (() => {
+    const skus = new Set(props.visibleSales.map((sale) => sale.artikelposition).filter(Boolean) as string[]);
+    const refunds = props.visibleSales.reduce((accumulator, sale) => accumulator + (sale.qtyRefunded ?? 0), 0);
+    const revenue = props.visibleSales.reduce((accumulator, sale) => accumulator + (sale.totalInclTax ?? 0), 0);
     return { skus: skus.size, refunds, revenue };
-  }, [visibleSales]);
+  })();
 
-  const refundRate = summary.units > 0 ? (summary.refundedUnits / summary.units) * 100 : 0;
+  const refundRate = props.summary.units > 0 ? (props.summary.refundedUnits / props.summary.units) * 100 : 0;
 
   return (
     <>
       <div className="bento">
         <div className="bento__item">
           <span className="bento__label">Заказы</span>
-          <span className="bento__value">{fmtNum(summary.orders)}</span>
-          <DeltaBadge value={computeRelativeDelta(summary.orders, previousSummary.orders)} />
+          <span className="bento__value">{fmtNum(props.summary.orders)}</span>
+          <DeltaBadge value={computeRelativeDelta(props.summary.orders, previousSummary.orders)} />
         </div>
         <div className="bento__item">
           <span className="bento__label">Продано, шт</span>
-          <span className="bento__value">{fmtNum(summary.units)}</span>
-          <DeltaBadge value={computeRelativeDelta(summary.units, previousSummary.units)} />
+          <span className="bento__value">{fmtNum(props.summary.units)}</span>
+          <DeltaBadge value={computeRelativeDelta(props.summary.units, previousSummary.units)} />
         </div>
         <div className="bento__item">
           <span className="bento__label">Возвраты, шт</span>
-          <span className="bento__value">{fmtNum(summary.refundedUnits)}</span>
+          <span className="bento__value">{fmtNum(props.summary.refundedUnits)}</span>
           <span className="bento__note">{refundRate.toFixed(1)}% от продаж</span>
           <DeltaBadge
             value={periodComparison.previous.length > 0 ? refundRate - previousSummary.refundRate : null}
@@ -119,17 +227,17 @@ export default function Overview({ visibleSales, comparisonSales, summary, inven
         </div>
         <div className="bento__item">
           <span className="bento__label">Сумма продаж</span>
-          <span className="bento__value">{fmtMoney(summary.revenue)}</span>
-          <DeltaBadge value={computeRelativeDelta(summary.revenue, previousSummary.revenue)} />
+          <span className="bento__value">{fmtMoney(props.summary.revenue)}</span>
+          <DeltaBadge value={computeRelativeDelta(props.summary.revenue, previousSummary.revenue)} />
         </div>
         <div className="bento__item">
           <span className="bento__label">FBA в продаже</span>
-          <span className="bento__value">{fmtNum(inventorySummary.sellable)}</span>
-          <span className="bento__note">{inventorySummary.skusWithStock} SKUs</span>
+          <span className="bento__value">{fmtNum(props.inventorySummary.sellable)}</span>
+          <span className="bento__note">{props.inventorySummary.skusWithStock} SKUs</span>
         </div>
         <div className="bento__item">
           <span className="bento__label">Низкий остаток</span>
-          <span className="bento__value">{fmtNum(inventorySummary.lowStockSkus)}</span>
+          <span className="bento__value">{fmtNum(props.inventorySummary.lowStockSkus)}</span>
           <span className="bento__note">SKUs ≤ 3 шт</span>
         </div>
       </div>

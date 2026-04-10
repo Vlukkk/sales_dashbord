@@ -8,10 +8,12 @@ import { buildScopeRows, type ScopeRow } from '../../utils/analytics';
 import { downloadCsv, downloadExcelWorkbook, type ExportColumn } from '../../utils/tableExport';
 
 interface Props {
-  visibleSales: EnrichedSale[];
   inventory: InventoryData;
   catalog: CatalogData;
   filters: FilterState;
+  visibleSales?: EnrichedSale[];
+  skuRows?: ScopeRow[];
+  parentRows?: ScopeRow[];
   onSelectSku: (sku: string) => void;
 }
 
@@ -277,27 +279,48 @@ function addStaleParentRows(rows: ScopeRow[], catalog: CatalogData, inventory: I
   return [...rows, ...staleRows];
 }
 
-export default function AggregatedTables({ visibleSales, inventory, catalog, filters, onSelectSku }: Props) {
-  const skuRows = useMemo(
-    () => buildScopeRows(visibleSales, 'artikelposition', inventory, 500),
-    [visibleSales, inventory],
-  );
-  const parentRows = useMemo(
-    () => withFullParentInventory(buildScopeRows(visibleSales, 'parentSku', inventory, 500), catalog, inventory),
-    [visibleSales, inventory, catalog],
-  );
+export default function AggregatedTables({
+  visibleSales,
+  inventory,
+  catalog,
+  filters,
+  skuRows,
+  parentRows,
+  onSelectSku,
+}: Props) {
+  const resolvedSkuRows = useMemo(() => {
+    if (skuRows) {
+      return skuRows.map((row) => {
+        const record = inventory.records[row.key];
+        return {
+          ...row,
+          stockSellable: record?.sellable ?? row.stockSellable,
+          stockTotal: record?.total ?? row.stockTotal,
+        };
+      });
+    }
+
+    return buildScopeRows(visibleSales ?? [], 'artikelposition', inventory, 500);
+  }, [inventory, skuRows, visibleSales]);
+  const resolvedParentRows = useMemo(() => {
+    if (parentRows) {
+      return withFullParentInventory(parentRows, catalog, inventory);
+    }
+
+    return withFullParentInventory(buildScopeRows(visibleSales ?? [], 'parentSku', inventory, 500), catalog, inventory);
+  }, [catalog, inventory, parentRows, visibleSales]);
   const parentRowsWithStale = useMemo(
-    () => addStaleParentRows(parentRows, catalog, inventory, filters),
-    [parentRows, catalog, inventory, filters],
+    () => addStaleParentRows(resolvedParentRows, catalog, inventory, filters),
+    [resolvedParentRows, catalog, inventory, filters],
   );
 
   // Add stale-stock rows: SKUs in inventory with stock > 0 but no sales in the current view.
   const skuRowsWithStale = useMemo(() => {
     if (hasSaleOnlyFilters(filters)) {
-      return skuRows;
+      return resolvedSkuRows;
     }
 
-    const known = new Set(skuRows.map((r) => r.key));
+    const known = new Set(resolvedSkuRows.map((r) => r.key));
     const stale: ScopeRow[] = [];
     for (const [sku, rec] of Object.entries(inventory.records)) {
       if (known.has(sku)) continue;
@@ -334,8 +357,8 @@ export default function AggregatedTables({ visibleSales, inventory, catalog, fil
         hasReturns: false,
       });
     }
-    return [...skuRows, ...stale];
-  }, [skuRows, inventory, catalog, filters]);
+    return [...resolvedSkuRows, ...stale];
+  }, [resolvedSkuRows, inventory, catalog, filters]);
   const filterSummary = useMemo(() => buildFilterSummary(filters), [filters]);
 
   const exportTable = (format: 'excel' | 'csv', labelTitle: string, rows: ScopeRow[]) => {

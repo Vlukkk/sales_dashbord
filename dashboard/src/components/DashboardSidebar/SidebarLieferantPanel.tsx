@@ -1,25 +1,18 @@
 import { useMemo, useState } from 'react';
 import { Segmented } from 'antd';
 import dayjs from 'dayjs';
-import type { CatalogData, SaleRecord } from '../../types';
+import type { CatalogData, LieferantSeries, SaleRecord } from '../../types';
 import { formatMetricValue } from '../../utils/analytics';
 
 type MetricMode = 'revenue' | 'units';
 
 interface Props {
-  sales: SaleRecord[];
+  sales?: SaleRecord[];
   catalog: CatalogData;
   dateRange: [string, string] | null;
+  series?: LieferantSeries[];
   activeLieferanten: string[];
   onToggleLieferant: (lieferant: string) => void;
-}
-
-interface LieferantSeries {
-  lieferant: string;
-  totalRevenue: number;
-  totalUnits: number;
-  dailyRevenue: number[];
-  dailyUnits: number[];
 }
 
 const LIEFERANT_COLORS = ['#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#7c3aed', '#14b8a6', '#f97316'];
@@ -151,17 +144,18 @@ function RowSparkline({ points, color }: { points: number[]; color: string }) {
 }
 
 export default function SidebarLieferantPanel({
-  sales,
+  sales = [],
   catalog,
   dateRange,
+  series,
   activeLieferanten,
   onToggleLieferant,
 }: Props) {
   const [metricMode, setMetricMode] = useState<MetricMode>('revenue');
   const [showOverflow, setShowOverflow] = useState(false);
   const lieferantSeries = useMemo(
-    () => buildLieferantSeries(sales, catalog, dateRange),
-    [sales, catalog, dateRange],
+    () => series ?? buildLieferantSeries(sales, catalog, dateRange),
+    [catalog, dateRange, sales, series],
   );
   const rows = useMemo(() => {
     return [...lieferantSeries]

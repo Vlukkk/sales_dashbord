@@ -1,32 +1,83 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Drawer, Descriptions, Tag, Typography, Divider, List } from 'antd';
 import type { CatalogData, InventoryData, SaleRecord } from '../../types';
 import { parseAmazName } from '../../utils/parseAmazName';
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 
 interface Props {
   sku: string | null;
   catalog: CatalogData;
   inventory: InventoryData;
-  sales: SaleRecord[];
+  sales?: SaleRecord[];
   onClose: () => void;
 }
 
-export default function SkuInfoCard({ sku, catalog, inventory, sales, onClose }: Props) {
+export default function SkuInfoCard({ sku, catalog, inventory, sales = [], onClose }: Props) {
   const product = sku ? catalog.products[sku] : null;
   const inventoryRecord = sku ? inventory.records[sku] : null;
   const parsed = useMemo(() => parseAmazName(product?.amaz_name ?? null), [product]);
+  const [remoteSummary, setRemoteSummary] = useState({
+    count: 0,
+    totalInclTax: 0,
+    totalProfit: 0,
+    loading: false,
+  });
+  const hasLocalSales = sales.length > 0;
 
   const skuSales = useMemo(() => {
     if (!sku) return [];
     return sales.filter((s) => s.artikelposition === sku);
   }, [sku, sales]);
 
-  const salesSummary = useMemo(() => {
+  const localSalesSummary = useMemo(() => {
     const count = skuSales.length;
     const totalInclTax = skuSales.reduce((s, r) => s + (r.totalInclTax || 0), 0);
     const totalProfit = skuSales.reduce((s, r) => s + (r.totalProfit || 0), 0);
     return { count, totalInclTax, totalProfit };
   }, [skuSales]);
+
+  useEffect(() => {
+    if (hasLocalSales || !sku) {
+      setRemoteSummary({ count: 0, totalInclTax: 0, totalProfit: 0, loading: false });
+      return;
+    }
+
+    const controller = new AbortController();
+    setRemoteSummary((prev) => ({ ...prev, loading: true }));
+
+    fetch(`${API_BASE}/api/dashboard/sku-summary?sku=${encodeURIComponent(sku)}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        return response.json();
+      })
+      .then((payload) => {
+        const summary = payload.summary ?? {};
+        setRemoteSummary({
+          count: Number(summary.rows) || 0,
+          totalInclTax: Number(summary.revenue) || 0,
+          totalProfit: Number(summary.profit) || 0,
+          loading: false,
+        });
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        console.error('Failed to load SKU summary:', error);
+        setRemoteSummary({ count: 0, totalInclTax: 0, totalProfit: 0, loading: false });
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [hasLocalSales, sku]);
+
+  const salesSummary = hasLocalSales ? localSalesSummary : remoteSummary;
 
   const siblings = useMemo(() => {
     if (!product?.amaz_parent_sku) return [];

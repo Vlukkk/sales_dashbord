@@ -1,22 +1,28 @@
 import { useId, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import dayjs from 'dayjs';
-import type { EnrichedSale } from '../../types';
+import type { DashboardDailyPoint, EnrichedSale } from '../../types';
+import type { MetricSummary } from '../../utils/analytics';
 import { splitSalesCurrentAndPrevious, summarizeSales } from '../../utils/analytics';
 
-interface Props {
+interface LegacyProps {
+  mode?: 'legacy';
   title: string;
   sales: EnrichedSale[];
   comparisonSales: EnrichedSale[];
 }
 
-interface DailyPoint {
-  date: string;
-  sales: number;
-  refunds: number;
-  refundRate: number;
-  revenue: number;
-  refundRevenue: number;
+interface ApiProps {
+  mode: 'api';
+  title: string;
+  points: DashboardDailyPoint[];
+  summary: MetricSummary;
+  previousSummary: MetricSummary | null;
+  from: string | null;
+  to: string | null;
 }
+
+type Props = LegacyProps | ApiProps;
+type DailyPoint = DashboardDailyPoint;
 
 interface Kpi {
   label: string;
@@ -584,15 +590,50 @@ function UnitsRefundRateChart({
   );
 }
 
-export default function SalesRefundChart({ title, sales, comparisonSales }: Props) {
+const EMPTY_SUMMARY: MetricSummary = {
+  revenue: 0,
+  profit: 0,
+  orders: 0,
+  units: 0,
+  refunds: 0,
+  refundedUnits: 0,
+  refundOrders: 0,
+  margin: 0,
+  avgOrder: 0,
+  refundRate: 0,
+  activeSkus: 0,
+  rows: 0,
+};
+
+export default function SalesRefundChart(props: Props) {
   const chartId = useId().replace(/:/g, '');
   const [hoveredRevenuePoint, setHoveredRevenuePoint] = useState<HoverState | null>(null);
   const [hoveredUnitsPoint, setHoveredUnitsPoint] = useState<HoverState | null>(null);
-  const periodComparison = splitSalesCurrentAndPrevious(sales, comparisonSales);
-  const summaryCurrent = summarizeSales(periodComparison.current);
-  const summaryPrevious = summarizeSales(periodComparison.previous);
-  const daily = buildDaily(periodComparison.current);
-  const hasPrevious = periodComparison.previous.length > 0;
+  const normalized = props.mode === 'api'
+    ? {
+      daily: props.points,
+      summaryCurrent: props.summary,
+      summaryPrevious: props.previousSummary ?? EMPTY_SUMMARY,
+      hasPrevious: props.previousSummary !== null,
+      from: props.from,
+      to: props.to,
+      rowCount: props.summary.rows,
+    }
+    : (() => {
+      const periodComparison = splitSalesCurrentAndPrevious(props.sales, props.comparisonSales);
+
+      return {
+        daily: buildDaily(periodComparison.current),
+        summaryCurrent: summarizeSales(periodComparison.current),
+        summaryPrevious: summarizeSales(periodComparison.previous),
+        hasPrevious: periodComparison.previous.length > 0,
+        from: periodComparison.from,
+        to: periodComparison.to,
+        rowCount: periodComparison.current.length,
+      };
+    })();
+
+  const { daily, summaryCurrent, summaryPrevious, hasPrevious, from, to, rowCount } = normalized;
   const totalUnits = summaryCurrent.units + summaryCurrent.refundedUnits;
   const handleRevenueHover: HoverHandler = (point, event) => {
     if (!point || !event) {
@@ -641,17 +682,17 @@ export default function SalesRefundChart({ title, sales, comparisonSales }: Prop
     <div className="chart-card">
       <div className="chart-card__title">
         <div>
-          <h3>{title}</h3>
-          {hasPrevious && periodComparison.from && periodComparison.to ? (
+          <h3>{props.title}</h3>
+          {hasPrevious && from && to ? (
             <div className="chart-card__subtitle">
-              Сравнение с предыдущим периодом для окна {periodComparison.from}..{periodComparison.to}
+              Сравнение с предыдущим периодом для окна {from}..{to}
             </div>
           ) : (
             <div className="chart-card__subtitle">Добавьте диапазон дат, чтобы видеть сравнение с предыдущим периодом.</div>
           )}
         </div>
         <div className="chart-card__title-right">
-          <span>{daily.length} дн · {periodComparison.current.length} записей</span>
+          <span>{daily.length} дн · {rowCount} записей</span>
         </div>
       </div>
 

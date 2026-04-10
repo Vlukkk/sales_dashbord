@@ -2,55 +2,69 @@ import { useCallback, useMemo } from 'react';
 import { Button, Collapse, DatePicker, Select } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import type { CatalogData, FilterState, SaleRecord } from '../../types';
+import type { CatalogData, FilterOptions, FilterState, LieferantSeries, SaleRecord } from '../../types';
 import { deriveChannel } from '../../utils/analytics';
 import SidebarLieferantPanel from './SidebarLieferantPanel';
 
 const { RangePicker } = DatePicker;
 
 interface Props {
-  sales: SaleRecord[];
-  filteredSales: SaleRecord[];
   catalog: CatalogData;
   filters: FilterState;
+  sales?: SaleRecord[];
+  filteredSales?: SaleRecord[];
+  filterOptions?: FilterOptions;
+  lieferantSeries?: LieferantSeries[];
   onFilterChange: <K extends keyof FilterState>(key: K, value: FilterState[K]) => void;
   onResetFilters: () => void;
 }
 
 export default function DashboardSidebar({
-  sales,
-  filteredSales,
   catalog,
   filters,
+  sales = [],
+  filteredSales = [],
+  filterOptions,
+  lieferantSeries,
   onFilterChange,
   onResetFilters,
 }: Props) {
   const parentSkus = useMemo(() => Object.keys(catalog.parentGroups).sort(), [catalog]);
   const skuOptions = useMemo(
-    () => [...new Set(sales.map((sale) => sale.artikelposition).filter(Boolean))] as string[],
-    [sales],
+    () => sales.length > 0
+      ? [...new Set(sales.map((sale) => sale.artikelposition).filter(Boolean))] as string[]
+      : Object.keys(catalog.products).sort(),
+    [catalog.products, sales],
   );
   const statuses = useMemo(
-    () => [...new Set(sales.map((sale) => sale.status).filter(Boolean))] as string[],
-    [sales],
+    () => filterOptions?.statuses ?? [...new Set(sales.map((sale) => sale.status).filter(Boolean))] as string[],
+    [filterOptions?.statuses, sales],
   );
   const groups = useMemo(
-    () => [...new Set(sales.map((sale) => sale.kundengruppe).filter(Boolean))] as string[],
-    [sales],
+    () => filterOptions?.customerGroups ?? [...new Set(sales.map((sale) => sale.kundengruppe).filter(Boolean))] as string[],
+    [filterOptions?.customerGroups, sales],
   );
   const channelOptions = useMemo(() => {
+    if (filterOptions?.channels) {
+      return filterOptions.channels;
+    }
+
     const values = sales.map((sale) => deriveChannel(sale));
     return [...new Set(values)].sort();
-  }, [sales]);
+  }, [filterOptions?.channels, sales]);
   const quickYears = useMemo(() => {
-    const years = sales
-      .map((sale) => sale.bestelldatum?.slice(0, 4))
-      .filter(Boolean)
-      .map((value) => Number(value))
-      .filter((value) => Number.isFinite(value));
+    const years = sales.length > 0
+      ? sales
+        .map((sale) => sale.bestelldatum?.slice(0, 4))
+        .filter(Boolean)
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value))
+      : filterOptions?.maxDate
+        ? [Number(filterOptions.maxDate.slice(0, 4))]
+        : [];
     const anchorYear = years.length > 0 ? Math.max(...years) : dayjs().year();
     return [anchorYear - 2, anchorYear - 1, anchorYear];
-  }, [sales]);
+  }, [filterOptions?.maxDate, sales]);
   const handleLieferantToggle = useCallback((lieferant: string) => {
     const nextValues = filters.lieferant.includes(lieferant)
       ? filters.lieferant.filter((value) => value !== lieferant)
@@ -213,6 +227,7 @@ export default function DashboardSidebar({
           sales={filteredSales}
           catalog={catalog}
           dateRange={filters.dateRange}
+          series={lieferantSeries}
           activeLieferanten={filters.lieferant}
           onToggleLieferant={handleLieferantToggle}
         />

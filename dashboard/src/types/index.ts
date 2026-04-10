@@ -100,6 +100,14 @@ export interface FilterState {
   lieferant: string[];
 }
 
+export interface FilterOptions {
+  statuses: string[];
+  customerGroups: string[];
+  channels: string[];
+  minDate: string | null;
+  maxDate: string | null;
+}
+
 export type MetricKey =
   | 'revenue'
   | 'profit'
@@ -151,4 +159,21 @@ export interface ParsedAmazName {
   width: string | null;
   weight: string | null;
   subType: string | null;
+}
+
+export interface DashboardDailyPoint {
+  date: string;
+  sales: number;
+  refunds: number;
+  refundRate: number;
+  revenue: number;
+  refundRevenue: number;
+}
+
+export interface LieferantSeries {
+  lieferant: string;
+  totalRevenue: number;
+  totalUnits: number;
+  dailyRevenue: number[];
+  dailyUnits: number[];
 }

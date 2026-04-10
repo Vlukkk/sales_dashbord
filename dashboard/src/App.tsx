@@ -7,8 +7,10 @@ import SkuInfoCard from './components/SkuInfoCard/SkuInfoCard';
 import { useData } from './hooks/useData';
 import { useDashboardAnalytics } from './hooks/useDashboardAnalytics';
 import { useFilters } from './hooks/useFilters';
+import { useServerFilters } from './hooks/useServerFilters';
+import { useDashboardData } from './hooks/useDashboardData';
 
-export default function App() {
+function StaticDashboardApp() {
   const { sales, catalog, inventory, loading, error } = useData();
   const { filters, updateFilter, resetFilters, filteredSales } = useFilters(sales, catalog);
   const [selectedSku, setSelectedSku] = useState<string | null>(null);
@@ -75,4 +77,74 @@ export default function App() {
       />
     </div>
   );
+}
+
+function ApiDashboardApp() {
+  const { catalog, inventory, filterOptions, loading, error } = useData();
+  const { filters, updateFilter, resetFilters } = useServerFilters(filterOptions);
+  const dashboard = useDashboardData(filters);
+  const [selectedSku, setSelectedSku] = useState<string | null>(null);
+
+  if (loading || (!dashboard.initialized && dashboard.loading)) {
+    return (
+      <div className="app-state">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (error || dashboard.error) {
+    return (
+      <div className="app-state">
+        <Typography.Text type="danger">Ошибка загрузки: {error ?? dashboard.error}</Typography.Text>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-shell">
+      <DashboardSidebar
+        catalog={catalog}
+        filters={filters}
+        filterOptions={filterOptions}
+        lieferantSeries={dashboard.lieferantSeries}
+        onFilterChange={updateFilter}
+        onResetFilters={resetFilters}
+      />
+
+      <main className="dashboard-main">
+        <Overview
+          mode="api"
+          summary={dashboard.summary}
+          previousSummary={dashboard.previousSummary}
+          inventorySummary={dashboard.inventorySummary}
+          filters={filters}
+          amazonSeries={dashboard.amazonSeries}
+          retailSeries={dashboard.retailSeries}
+        />
+
+        <AggregatedTables
+          inventory={inventory}
+          catalog={catalog}
+          filters={filters}
+          skuRows={dashboard.skuRows}
+          parentRows={dashboard.parentRows}
+          onSelectSku={setSelectedSku}
+        />
+      </main>
+
+      <SkuInfoCard
+        sku={selectedSku}
+        catalog={catalog}
+        inventory={inventory}
+        onClose={() => setSelectedSku(null)}
+      />
+    </div>
+  );
+}
+
+export default function App() {
+  return import.meta.env.VITE_DATA_SOURCE === 'api'
+    ? <ApiDashboardApp />
+    : <StaticDashboardApp />;
 }
