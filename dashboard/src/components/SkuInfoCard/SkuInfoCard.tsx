@@ -14,9 +14,17 @@ interface Props {
 }
 
 export default function SkuInfoCard({ sku, catalog, inventory, sales = [], onClose }: Props) {
-  const product = sku ? catalog.products[sku] : null;
-  const inventoryRecord = sku ? inventory.records[sku] : null;
-  const parsed = useMemo(() => parseAmazName(product?.amaz_name ?? null), [product]);
+  const [remoteDetail, setRemoteDetail] = useState<{
+    product: CatalogData['products'][string] | null;
+    inventory: InventoryData['records'][string] | null;
+    siblings: Array<{ sku: string; name: string | null; length: string | null }>;
+    loading: boolean;
+  }>({
+    product: null,
+    inventory: null,
+    siblings: [],
+    loading: false,
+  });
   const [remoteSummary, setRemoteSummary] = useState({
     count: 0,
     totalInclTax: 0,
@@ -24,6 +32,14 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales = [], onClo
     loading: false,
   });
   const hasLocalSales = sales.length > 0;
+  const hasLocalInventory = Boolean(sku && inventory.records[sku]);
+  const product = (hasLocalSales || hasLocalInventory)
+    ? (sku ? catalog.products[sku] : null)
+    : remoteDetail.product;
+  const inventoryRecord = (hasLocalSales || hasLocalInventory)
+    ? (sku ? inventory.records[sku] : null)
+    : remoteDetail.inventory;
+  const parsed = useMemo(() => parseAmazName(product?.amaz_name ?? null), [product]);
 
   const skuSales = useMemo(() => {
     if (!sku) return [];
@@ -38,15 +54,17 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales = [], onClo
   }, [skuSales]);
 
   useEffect(() => {
-    if (hasLocalSales || !sku) {
+    if ((hasLocalSales && hasLocalInventory) || !sku) {
       setRemoteSummary({ count: 0, totalInclTax: 0, totalProfit: 0, loading: false });
+      setRemoteDetail({ product: null, inventory: null, siblings: [], loading: false });
       return;
     }
 
     const controller = new AbortController();
     setRemoteSummary((prev) => ({ ...prev, loading: true }));
+    setRemoteDetail((prev) => ({ ...prev, loading: true }));
 
-    fetch(`${API_BASE}/api/dashboard/sku-summary?sku=${encodeURIComponent(sku)}`, { signal: controller.signal })
+    fetch(`${API_BASE}/api/dashboard/sku-detail?sku=${encodeURIComponent(sku)}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(`API error: ${response.status}`);
@@ -62,24 +80,31 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales = [], onClo
           totalProfit: Number(summary.profit) || 0,
           loading: false,
         });
+        setRemoteDetail({
+          product: payload.product ?? null,
+          inventory: payload.inventory ?? null,
+          siblings: payload.siblings ?? [],
+          loading: false,
+        });
       })
       .catch((error) => {
         if (controller.signal.aborted) {
           return;
         }
 
-        console.error('Failed to load SKU summary:', error);
+        console.error('Failed to load SKU detail:', error);
         setRemoteSummary({ count: 0, totalInclTax: 0, totalProfit: 0, loading: false });
+        setRemoteDetail({ product: null, inventory: null, siblings: [], loading: false });
       });
 
     return () => {
       controller.abort();
     };
-  }, [hasLocalSales, sku]);
+  }, [hasLocalInventory, hasLocalSales, sku]);
 
   const salesSummary = hasLocalSales ? localSalesSummary : remoteSummary;
 
-  const siblings = useMemo(() => {
+  const localSiblings = useMemo(() => {
     if (!product?.amaz_parent_sku) return [];
     const children = catalog.parentGroups[product.amaz_parent_sku] || [];
     return children.filter((c) => c !== sku).map((c) => ({
@@ -88,6 +113,7 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales = [], onClo
       length: catalog.products[c]?.chain_length,
     }));
   }, [sku, product, catalog]);
+  const siblings = hasLocalSales || hasLocalInventory ? localSiblings : remoteDetail.siblings;
 
   return (
     <Drawer

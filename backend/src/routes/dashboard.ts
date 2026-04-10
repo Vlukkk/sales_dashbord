@@ -44,6 +44,24 @@ interface DashboardBootstrapPayload {
   };
 }
 
+interface SkuDetailPayload {
+  product: Record<string, unknown> | null;
+  inventory: {
+    sku: string;
+    asin: string | null;
+    fulfillmentChannelSku: string | null;
+    sellable: number;
+    unsellable: number;
+    total: number;
+  } | null;
+  summary: MetricSummary;
+  siblings: Array<{
+    sku: string;
+    name: string | null;
+    length: string | null;
+  }>;
+}
+
 interface MetricSummary {
   revenue: number;
   profit: number;
@@ -262,13 +280,11 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       pool.query<{
         sku_code: string;
         parent_sku: string | null;
-        raw_attributes: Record<string, unknown> | null;
         supplier_name: string | null;
       }>(`
         SELECT
           sk.sku_code,
           sk.parent_sku,
-          sk.raw_attributes,
           s.name AS supplier_name
         FROM skus sk
         LEFT JOIN LATERAL (
@@ -319,19 +335,10 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     const supplierNames = new Set<string>();
 
     for (const row of skuResult.rows) {
-      const raw = row.raw_attributes ?? {};
       const product: Record<string, unknown> = {
-        sku: String(raw.sku ?? row.sku_code),
-        sku_vender: raw.sku_vender ?? null,
-        purchase_price: raw.purchase_price ?? null,
-        amaz_parent_sku: row.parent_sku ?? raw.amaz_parent_sku ?? null,
-        amaz_name: raw.amaz_name ?? null,
-        chain_length: raw.chain_length ?? null,
-        product_type: raw.product_type ?? null,
-        amaz_metal_stamp: raw.amaz_metal_stamp ?? null,
-        lieferant: row.supplier_name ?? raw.lieferant ?? null,
-        amaz_price: raw.amaz_price ?? null,
-        status: raw.status ?? null,
+        sku: row.sku_code,
+        amaz_parent_sku: row.parent_sku ?? null,
+        lieferant: row.supplier_name ?? null,
       };
       products[row.sku_code] = product;
 
@@ -384,7 +391,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         lieferanten: Array.from(supplierNames).sort((left, right) => left.localeCompare(right)),
       },
       inventory: {
-        records: inventoryRecords,
+        records: {},
         totals: inventoryTotals,
       },
       filterOptions: {
@@ -394,6 +401,115 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         minDate: filterOptions?.min_date ?? null,
         maxDate: filterOptions?.max_date ?? null,
       },
+    };
+  });
+
+  app.get('/api/dashboard/sku-detail', async (request): Promise<SkuDetailPayload> => {
+    const query = request.query as Record<string, string | undefined>;
+    const sku = query.sku?.trim();
+
+    if (!sku) {
+      return {
+        product: null,
+        inventory: null,
+        summary: buildMetricSummary(undefined),
+        siblings: [],
+      };
+    }
+
+    const [productResult, inventoryResult, summaryResult] = await Promise.all([
+      pool.query<{
+        sku_code: string;
+        parent_sku: string | null;
+        raw_attributes: Record<string, unknown> | null;
+        supplier_name: string | null;
+      }>(`
+        SELECT
+          sk.sku_code,
+          sk.parent_sku,
+          sk.raw_attributes,
+          s.name AS supplier_name
+        FROM skus sk
+        LEFT JOIN LATERAL (
+          SELECT supplier_id
+          FROM sku_supplier
+          WHERE sku_id = sk.id
+          ORDER BY is_primary DESC, updated_at DESC, supplier_id ASC
+          LIMIT 1
+        ) ss ON TRUE
+        LEFT JOIN suppliers s ON s.id = ss.supplier_id
+        WHERE sk.sku_code = $1
+        LIMIT 1
+      `, [sku]),
+      pool.query<{
+        sku_code: string;
+        asin: string | null;
+        fulfillment_channel_sku: string | null;
+        sellable_qty: number;
+        unsellable_qty: number;
+      }>(`
+        SELECT
+          i.sku_code,
+          i.asin,
+          i.fulfillment_channel_sku,
+          i.sellable_qty,
+          i.unsellable_qty
+        ${INVENTORY_JOINS}
+        WHERE i.sku_code = $1
+        LIMIT 1
+      `, [sku]),
+      pool.query(`
+        SELECT ${SUMMARY_SELECT}
+        FROM sales s
+        WHERE s.sku_code = $1
+      `, [sku]),
+    ]);
+
+    const productRow = productResult.rows[0];
+    const inventoryRow = inventoryResult.rows[0];
+    const raw = productRow?.raw_attributes ?? {};
+    const product = productRow
+      ? {
+        ...raw,
+        sku: String(raw.sku ?? productRow.sku_code),
+        amaz_parent_sku: productRow.parent_sku ?? raw.amaz_parent_sku ?? null,
+        lieferant: productRow.supplier_name ?? raw.lieferant ?? null,
+      }
+      : null;
+
+    const siblings = productRow?.parent_sku
+      ? await pool.query<{
+        sku_code: string;
+        raw_attributes: Record<string, unknown> | null;
+      }>(`
+        SELECT
+          sk.sku_code,
+          sk.raw_attributes
+        FROM skus sk
+        WHERE sk.parent_sku = $1
+          AND sk.sku_code <> $2
+        ORDER BY sk.sku_code ASC
+      `, [productRow.parent_sku, sku])
+      : null;
+
+    return {
+      product,
+      inventory: inventoryRow
+        ? {
+          sku: inventoryRow.sku_code,
+          asin: inventoryRow.asin,
+          fulfillmentChannelSku: inventoryRow.fulfillment_channel_sku,
+          sellable: inventoryRow.sellable_qty,
+          unsellable: inventoryRow.unsellable_qty,
+          total: inventoryRow.sellable_qty + inventoryRow.unsellable_qty,
+        }
+        : null,
+      summary: buildMetricSummary(summaryResult.rows[0]),
+      siblings: siblings?.rows.map((row) => ({
+        sku: row.sku_code,
+        name: String(row.raw_attributes?.amaz_name ?? row.sku_code),
+        length: typeof row.raw_attributes?.chain_length === 'string' ? row.raw_attributes.chain_length : null,
+      })) ?? [],
     };
   });
 
