@@ -31,12 +31,18 @@ export default function DashboardSidebar({
   onFilterChange,
   onResetFilters,
 }: Props) {
-  const parentSkus = useMemo(() => Object.keys(catalog.parentGroups).sort(), [catalog]);
+  const parentSkuOptions = useMemo(
+    () => filterOptions?.parentSkuOptions ?? Object.keys(catalog.parentGroups).sort().map((value) => ({
+      value,
+      count: catalog.parentGroups[value]?.length ?? 0,
+    })),
+    [catalog.parentGroups, filterOptions?.parentSkuOptions],
+  );
   const skuOptions = useMemo(
-    () => sales.length > 0
+    () => filterOptions?.skuOptions ?? (sales.length > 0
       ? [...new Set(sales.map((sale) => sale.artikelposition).filter(Boolean))] as string[]
-      : Object.keys(catalog.products).sort(),
-    [catalog.products, sales],
+      : Object.keys(catalog.products).sort()),
+    [catalog.products, filterOptions?.skuOptions, sales],
   );
   const statuses = useMemo(
     () => filterOptions?.statuses ?? [...new Set(sales.map((sale) => sale.status).filter(Boolean))] as string[],
@@ -146,9 +152,9 @@ export default function DashboardSidebar({
             allowClear
             value={filters.parentSku}
             onChange={(value) => onFilterChange('parentSku', value)}
-            options={parentSkus.map((value) => ({
-              label: `${value} (${catalog.parentGroups[value]?.length ?? 0})`,
-              value,
+            options={parentSkuOptions.map((option) => ({
+              label: `${option.value} (${option.count})`,
+              value: option.value,
             }))}
             showSearch
             placeholder="Все Parent SKUs"

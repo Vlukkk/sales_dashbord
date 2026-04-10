@@ -106,6 +106,11 @@ export interface FilterOptions {
   channels: string[];
   minDate: string | null;
   maxDate: string | null;
+  skuOptions?: string[];
+  parentSkuOptions?: Array<{
+    value: string;
+    count: number;
+  }>;
 }
 
 export type MetricKey =

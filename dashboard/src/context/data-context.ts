@@ -23,6 +23,8 @@ export const emptyData: DataContextType = {
     channels: [],
     minDate: null,
     maxDate: null,
+    skuOptions: [],
+    parentSkuOptions: [],
   },
   loading: true,
   error: null,

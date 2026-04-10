@@ -29,6 +29,17 @@ function normalizeProduct(product: Product): Product {
 }
 
 export function normalizeCatalogData(catalog: CatalogData): CatalogData {
+  if (Object.keys(catalog.products).length === 0) {
+    return {
+      ...catalog,
+      lieferanten: [...new Set(
+        (catalog.lieferanten ?? [])
+          .map((value) => normalizeLieferantName(value))
+          .filter((value): value is string => Boolean(value)),
+      )].sort((left, right) => left.localeCompare(right)),
+    };
+  }
+
   const products = Object.fromEntries(
     Object.entries(catalog.products).map(([sku, product]) => [sku, normalizeProduct(product)]),
   );

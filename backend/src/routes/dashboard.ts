@@ -41,6 +41,11 @@ interface DashboardBootstrapPayload {
     channels: string[];
     minDate: string | null;
     maxDate: string | null;
+    skuOptions: string[];
+    parentSkuOptions: Array<{
+      value: string;
+      count: number;
+    }>;
   };
 }
 
@@ -493,42 +498,46 @@ async function buildChartSeriesPayload(
 
 export async function registerDashboardRoutes(app: FastifyInstance) {
   app.get('/api/dashboard/bootstrap', async (): Promise<DashboardBootstrapPayload> => {
-    const [skuResult, inventoryResult, filterOptionsResult] = await Promise.all([
+    const [supplierResult, skuOptionsResult, parentOptionsResult, inventoryTotalsResult, filterOptionsResult] = await Promise.all([
       pool.query<{
-        sku_code: string;
-        parent_sku: string | null;
-        supplier_name: string | null;
+        name: string;
       }>(`
-        SELECT
-          sk.sku_code,
-          sk.parent_sku,
-          s.name AS supplier_name
-        FROM skus sk
-        LEFT JOIN LATERAL (
-          SELECT supplier_id
-          FROM sku_supplier
-          WHERE sku_id = sk.id
-          ORDER BY is_primary DESC, updated_at DESC, supplier_id ASC
-          LIMIT 1
-        ) ss ON TRUE
-        LEFT JOIN suppliers s ON s.id = ss.supplier_id
-        ORDER BY sk.sku_code ASC
+        SELECT name
+        FROM suppliers
+        ORDER BY name ASC
       `),
       pool.query<{
         sku_code: string;
-        asin: string | null;
-        fulfillment_channel_sku: string | null;
-        sellable_qty: number;
-        unsellable_qty: number;
       }>(`
         SELECT
-          i.sku_code,
-          i.asin,
-          i.fulfillment_channel_sku,
-          i.sellable_qty,
-          i.unsellable_qty
+          sk.sku_code
+        FROM skus sk
+        ORDER BY sk.sku_code ASC
+      `),
+      pool.query<{
+        parent_sku: string;
+        sku_count: number;
+      }>(`
+        SELECT
+          sk.parent_sku,
+          COUNT(*) AS sku_count
+        FROM skus sk
+        WHERE sk.parent_sku IS NOT NULL
+        GROUP BY sk.parent_sku
+        ORDER BY sk.parent_sku ASC
+      `),
+      pool.query<{
+        sellable: number;
+        unsellable: number;
+        skus_with_stock: number;
+        tracked_skus: number;
+      }>(`
+        SELECT
+          COALESCE(SUM(i.sellable_qty), 0) AS sellable,
+          COALESCE(SUM(i.unsellable_qty), 0) AS unsellable,
+          COUNT(*) FILTER (WHERE i.sellable_qty > 0) AS skus_with_stock,
+          COUNT(*) AS tracked_skus
         ${INVENTORY_JOINS}
-        ORDER BY i.sku_code ASC
       `),
       pool.query<{
         statuses: string[] | null;
@@ -547,69 +556,24 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
       `),
     ]);
 
-    const products: Record<string, Record<string, unknown>> = {};
-    const parentGroups: Record<string, string[]> = {};
-    const supplierNames = new Set<string>();
-
-    for (const row of skuResult.rows) {
-      const product: Record<string, unknown> = {
-        sku: row.sku_code,
-        amaz_parent_sku: row.parent_sku ?? null,
-        lieferant: row.supplier_name ?? null,
-      };
-      products[row.sku_code] = product;
-
-      if (row.parent_sku) {
-        const siblings = parentGroups[row.parent_sku] ?? [];
-        siblings.push(row.sku_code);
-        parentGroups[row.parent_sku] = siblings;
-      }
-
-      if (typeof product.lieferant === 'string' && product.lieferant.trim()) {
-        supplierNames.add(product.lieferant.trim());
-      }
-    }
-
-    const inventoryRecords: DashboardBootstrapPayload['inventory']['records'] = {};
-    const inventoryTotals = {
-      sellable: 0,
-      unsellable: 0,
-      total: 0,
-      skusWithStock: 0,
-      trackedSkus: 0,
-    };
-
-    for (const row of inventoryResult.rows) {
-      const total = row.sellable_qty + row.unsellable_qty;
-      inventoryRecords[row.sku_code] = {
-        sku: row.sku_code,
-        asin: row.asin,
-        fulfillmentChannelSku: row.fulfillment_channel_sku,
-        sellable: row.sellable_qty,
-        unsellable: row.unsellable_qty,
-        total,
-      };
-
-      inventoryTotals.sellable += row.sellable_qty;
-      inventoryTotals.unsellable += row.unsellable_qty;
-      inventoryTotals.total += total;
-      inventoryTotals.trackedSkus += 1;
-      if (row.sellable_qty > 0) {
-        inventoryTotals.skusWithStock += 1;
-      }
-    }
-
     const filterOptions = filterOptionsResult.rows[0];
+    const inventoryTotals = inventoryTotalsResult.rows[0];
 
     return {
       catalog: {
-        products,
-        parentGroups,
-        lieferanten: Array.from(supplierNames).sort((left, right) => left.localeCompare(right)),
+        products: {},
+        parentGroups: {},
+        lieferanten: supplierResult.rows.map((row) => row.name),
       },
       inventory: {
         records: {},
-        totals: inventoryTotals,
+        totals: {
+          sellable: Number(inventoryTotals?.sellable) || 0,
+          unsellable: Number(inventoryTotals?.unsellable) || 0,
+          total: (Number(inventoryTotals?.sellable) || 0) + (Number(inventoryTotals?.unsellable) || 0),
+          skusWithStock: Number(inventoryTotals?.skus_with_stock) || 0,
+          trackedSkus: Number(inventoryTotals?.tracked_skus) || 0,
+        },
       },
       filterOptions: {
         statuses: [...(filterOptions?.statuses ?? [])].sort((left, right) => left.localeCompare(right)),
@@ -617,6 +581,11 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
         channels: [...(filterOptions?.channels ?? [])].sort((left, right) => left.localeCompare(right)),
         minDate: filterOptions?.min_date ?? null,
         maxDate: filterOptions?.max_date ?? null,
+        skuOptions: skuOptionsResult.rows.map((row) => row.sku_code),
+        parentSkuOptions: parentOptionsResult.rows.map((row) => ({
+          value: row.parent_sku,
+          count: Number(row.sku_count) || 0,
+        })),
       },
     };
   });
