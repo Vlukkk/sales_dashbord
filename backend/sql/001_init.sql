@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS sku_supplier (
 CREATE TABLE IF NOT EXISTS sales (
   id BIGSERIAL PRIMARY KEY,
   source_row_hash TEXT NOT NULL UNIQUE,
+  business_key TEXT,
   order_number TEXT,
   sku_id BIGINT REFERENCES skus(id) ON DELETE SET NULL,
   sku_code TEXT NOT NULL,
@@ -137,6 +138,41 @@ CREATE INDEX IF NOT EXISTS idx_sales_order_date ON sales (order_date);
 CREATE INDEX IF NOT EXISTS idx_sales_sku_id ON sales (sku_id);
 CREATE INDEX IF NOT EXISTS idx_sales_order_status ON sales (order_status);
 CREATE INDEX IF NOT EXISTS idx_sales_channel ON sales (channel);
+CREATE INDEX IF NOT EXISTS idx_sales_order_number ON sales (order_number);
 CREATE INDEX IF NOT EXISTS idx_inventory_snapshot_date ON inventory_snapshots (snapshot_date);
 CREATE INDEX IF NOT EXISTS idx_inventory_snapshot_sku_id ON inventory_snapshots (sku_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_snapshot_sku_code ON inventory_snapshots (sku_code);
+
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS business_key TEXT;
+
+UPDATE sales
+SET business_key = order_number || '|' || sku_code
+WHERE business_key IS NULL
+  AND order_number IS NOT NULL
+  AND sku_code IS NOT NULL;
+
+WITH ranked AS (
+  SELECT
+    id,
+    ROW_NUMBER() OVER (PARTITION BY business_key ORDER BY id DESC) AS row_num
+  FROM sales
+  WHERE business_key IS NOT NULL
+)
+DELETE FROM sales
+WHERE id IN (
+  SELECT id
+  FROM ranked
+  WHERE row_num > 1
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'uq_sales_business_key'
+  ) THEN
+    ALTER TABLE sales
+    ADD CONSTRAINT uq_sales_business_key UNIQUE (business_key);
+  END IF;
+END $$;

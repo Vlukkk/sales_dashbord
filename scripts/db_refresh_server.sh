@@ -50,13 +50,21 @@ from pathlib import Path
 import sys
 
 try:
-    from scripts.preprocess import SALES_XML, CATALOG_XLSX, LIEFERANT_XLSX, INVENTORY_TXT
+    from scripts.preprocess import (
+        SALES_XML,
+        CATALOG_XLSX,
+        LIEFERANT_XLSX,
+        INVENTORY_TXT,
+        discover_sales_xml_files,
+    )
 except Exception as exc:  # pragma: no cover - bash entrypoint validation
     print(f"Source validation failed: {exc}", file=sys.stderr)
     sys.exit(1)
 
+sales_sources = discover_sales_xml_files()
+print(f"Sales sources found: {len(sales_sources)}")
 for label, path in (
-    ("Sales source", SALES_XML),
+    ("Latest sales source", SALES_XML),
     ("Catalog source", CATALOG_XLSX),
     ("Lieferanten source", LIEFERANT_XLSX),
     ("Inventory source", INVENTORY_TXT),

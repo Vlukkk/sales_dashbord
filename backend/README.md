@@ -12,7 +12,9 @@
 
 ## Источники данных
 
-- продажи: последний `product - *.xml` из папки `data/`
+- продажи:
+  - для JSON/локальной статической сборки: последний `product - *.xml` из папки `data/`
+  - для PostgreSQL import: все `product - *.xml` из `raw/sales/` с дедупликацией по `bestellungNr + artikelposition`
 - поставщики: `SKU-Lieferant.xlsx` как master file
 - остатки FBA: текущий `Lagerbestand...txt`
 

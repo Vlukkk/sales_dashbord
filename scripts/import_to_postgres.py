@@ -27,6 +27,7 @@ try:
         INVENTORY_TXT,
         LIEFERANT_XLSX,
         SALES_XML,
+        discover_sales_xml_files,
         parse_catalog,
         parse_inventory,
         parse_lieferanten,
@@ -38,6 +39,7 @@ except ModuleNotFoundError:
         INVENTORY_TXT,
         LIEFERANT_XLSX,
         SALES_XML,
+        discover_sales_xml_files,
         parse_catalog,
         parse_inventory,
         parse_lieferanten,
@@ -63,6 +65,15 @@ def sha256_file(path: Path) -> str:
 def row_hash(payload: Dict[str, Any]) -> str:
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def build_sales_business_key(row: Dict[str, Any]) -> str:
+    order_number = str(row.get("bestellungNr") or "").strip()
+    sku_code = str(row.get("artikelposition") or "").strip()
+    if order_number and sku_code:
+        return f"{order_number}|{sku_code}"
+
+    return row_hash(row)
 
 
 def derive_channel(sale: Dict[str, Any]) -> str:
@@ -140,6 +151,26 @@ class ImportWriter:
             )
             row = cur.fetchone()
             assert row is not None
+            return ImportRun(id=row["id"], source_type=row["source_type"], filename=row["filename"])
+
+    def find_completed_import(self, source_type: str, file_hash: str) -> Optional[ImportRun]:
+        with self.conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT id, source_type, filename
+                FROM data_imports
+                WHERE source_type = %s
+                  AND file_hash = %s
+                  AND status = 'completed'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (source_type, file_hash),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return None
+
             return ImportRun(id=row["id"], source_type=row["source_type"], filename=row["filename"])
 
     def finish_import(
@@ -313,6 +344,7 @@ class ImportWriter:
                     """
                     INSERT INTO sales (
                       source_row_hash,
+                      business_key,
                       order_number,
                       sku_id,
                       sku_code,
@@ -336,10 +368,12 @@ class ImportWriter:
                       import_id
                     )
                     VALUES (
-                      %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s
+                      %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s
                     )
-                    ON CONFLICT (source_row_hash) DO UPDATE SET
+                    ON CONFLICT (business_key) DO UPDATE SET
                       order_number = EXCLUDED.order_number,
+                      source_row_hash = EXCLUDED.source_row_hash,
+                      business_key = EXCLUDED.business_key,
                       sku_id = EXCLUDED.sku_id,
                       sku_code = EXCLUDED.sku_code,
                       order_status = EXCLUDED.order_status,
@@ -364,6 +398,7 @@ class ImportWriter:
                     """,
                     (
                         row_hash(row),
+                        build_sales_business_key(row),
                         row.get("bestellungNr"),
                         sku_ids.get(sku_code),
                         sku_code,
@@ -447,34 +482,37 @@ class ImportWriter:
         return inserted, updated
 
 
-def load_source_bundle() -> tuple[list[Dict[str, Any]], Dict[str, Any], Dict[str, Any]]:
-    sales_rows = parse_sales()
+def load_sales_sources() -> list[tuple[Path, list[Dict[str, Any]]]]:
+    sales_sources: list[tuple[Path, list[Dict[str, Any]]]] = []
+    for source_path in discover_sales_xml_files():
+        sales_sources.append((source_path, parse_sales(source_path)))
+    return sales_sources
+
+
+def load_source_bundle() -> tuple[list[tuple[Path, list[Dict[str, Any]]]], Dict[str, Any], Dict[str, Any]]:
+    sales_sources = load_sales_sources()
+    sales_rows = [row for _, rows in sales_sources for row in rows]
     inventory = parse_inventory()
     inventory_records = inventory["records"]
     inventory_skus = set(inventory_records.keys())
     sales_skus = {row["artikelposition"] for row in sales_rows if row.get("artikelposition")}
     supplier_map = parse_lieferanten()
     catalog = parse_catalog(sales_skus, inventory_skus, supplier_map)
-    return sales_rows, catalog, inventory
+    return sales_sources, catalog, inventory
 
 
 def main() -> None:
     database_url = require_database_url()
-    sales_rows, catalog, inventory = load_source_bundle()
+    sales_sources, catalog, inventory = load_source_bundle()
     products = catalog["products"]
     inventory_records = inventory["records"]
     snapshot_date = parse_snapshot_date(INVENTORY_TXT.name)
+    total_sales_rows = sum(len(rows) for _, rows in sales_sources)
 
     with psycopg.connect(database_url) as conn:
         conn.execute("SET TIME ZONE 'UTC'")
         writer = ImportWriter(conn)
 
-        sales_import = writer.create_import(
-            "sales_xml",
-            SALES_XML.name,
-            sha256_file(SALES_XML),
-            len(sales_rows),
-        )
         catalog_import = writer.create_import(
             "catalog_bundle",
             f"{CATALOG_XLSX.name} + {LIEFERANT_XLSX.name}",
@@ -501,7 +539,52 @@ def main() -> None:
             sku_ids = writer.load_sku_ids()
             supplier_ids = writer.load_supplier_ids()
             rel_inserted, rel_updated = writer.upsert_sku_suppliers(products, sku_ids, supplier_ids)
-            sales_inserted, sales_updated = writer.upsert_sales(sales_rows, sku_ids, sales_import)
+            sales_inserted = 0
+            sales_updated = 0
+            sales_skipped = 0
+
+            for sales_source, sales_rows in sales_sources:
+                file_hash = sha256_file(sales_source)
+                existing_import = writer.find_completed_import("sales_xml", file_hash)
+                if existing_import is not None:
+                    sales_skipped += len(sales_rows)
+                    continue
+
+                sales_import = writer.create_import(
+                    "sales_xml",
+                    sales_source.name,
+                    file_hash,
+                    len(sales_rows),
+                )
+                conn.commit()
+
+                try:
+                    inserted, updated = writer.upsert_sales(sales_rows, sku_ids, sales_import)
+                    writer.finish_import(
+                        sales_import,
+                        inserted=inserted,
+                        updated=updated,
+                        skipped=max(0, len(sales_rows) - inserted - updated),
+                    )
+                    conn.commit()
+                except Exception as error:
+                    conn.rollback()
+                    with psycopg.connect(database_url) as error_conn:
+                        error_writer = ImportWriter(error_conn)
+                        error_writer.finish_import(
+                            sales_import,
+                            inserted=0,
+                            updated=0,
+                            skipped=0,
+                            status="failed",
+                            error_message=str(error),
+                        )
+                        error_conn.commit()
+                    raise
+
+                sales_inserted += inserted
+                sales_updated += updated
+
             inventory_inserted, inventory_updated = writer.upsert_inventory(
                 inventory_records,
                 sku_ids,
@@ -509,12 +592,6 @@ def main() -> None:
                 inventory_import,
             )
 
-            writer.finish_import(
-                sales_import,
-                inserted=sales_inserted,
-                updated=sales_updated,
-                skipped=max(0, len(sales_rows) - sales_inserted - sales_updated),
-            )
             writer.finish_import(
                 catalog_import,
                 inserted=sku_inserted + rel_inserted,
@@ -532,18 +609,18 @@ def main() -> None:
             conn.rollback()
             with psycopg.connect(database_url) as error_conn:
                 error_writer = ImportWriter(error_conn)
-                for run in (sales_import, catalog_import, inventory_import):
+                for run in (catalog_import, inventory_import):
                     error_writer.finish_import(run, inserted=0, updated=0, skipped=0, status="failed", error_message=str(error))
                 error_conn.commit()
             raise
 
     print("PostgreSQL import completed")
-    print(f"Sales source: {SALES_XML}")
+    print(f"Sales sources: {len(sales_sources)} files from {SALES_XML.parent}")
     print(f"Catalog source: {CATALOG_XLSX}")
     print(f"Lieferanten source: {LIEFERANT_XLSX}")
     print(f"Inventory source: {INVENTORY_TXT}")
     print(f"SKUs: {len(products)}")
-    print(f"Sales rows: {len(sales_rows)}")
+    print(f"Sales rows: {total_sales_rows}")
     print(f"Inventory rows: {len(inventory_records)}")
     print(f"Snapshot date: {snapshot_date}")
 

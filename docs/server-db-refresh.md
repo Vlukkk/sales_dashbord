@@ -34,16 +34,18 @@
 
 ## Важное правило по продажам
 
-Текущий безопасный режим:
+Текущий серверный режим:
 
-- script берёт только **последний** `product - *.xml` из `raw/sales/`
+- script проходит по всем `product - *.xml` в `raw/sales/`
+- повторный импорт того же файла пропускается по `file_hash`
+- уникальность продажи определяется по `bestellungNr + artikelposition`
+- если в новом XML есть уже известная продажа, запись в БД обновляется, а не дублируется
 
 Это означает:
 
-- если ты скачал новый полный XML, положи его в `raw/sales/`
-- старые overlapping XML лучше убрать из `raw/sales/`, чтобы не было путаницы
-
-Пока мы **не делаем** merge нескольких sales XML в историю. Для этого нужен отдельный staging/import flow.
+- новый sales XML можно просто положить в `raw/sales/`
+- старые sales XML можно хранить в этой же папке
+- overlapping файлы допустимы: пересечения не должны плодить дубли по продажам
 
 ## One-Time Server Bootstrap
 
@@ -66,11 +68,17 @@ git pull --ff-only origin main
 
 После того как скачал новые данные:
 
-1. Sales XML положить в:
+1. Новый Sales XML положить в:
 
 ```text
 /srv/sales_dashbord/raw/sales/
 ```
+
+Файл не нужно переименовывать или удалять предыдущие XML. Скрипт сам:
+
+- найдёт все sales XML
+- пропустит уже импортированные файлы
+- обновит пересекающиеся продажи по `bestellungNr + artikelposition`
 
 2. Если обновился supplier master, заменить:
 
@@ -140,7 +148,7 @@ git pull --ff-only origin main
 
 `db_refresh_server.sh` использует:
 
-- `raw/sales/` как источник продаж
+- `raw/sales/` как набор sales XML для merge-import
 - `raw/master/` как master data
 - `raw/inventory/` как snapshots
 
