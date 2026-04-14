@@ -21,6 +21,7 @@ interface FbmMarginParams {
   pageSize: number;
   sortBy: string;
   sortDir: 'ASC' | 'DESC';
+  includeDetails: boolean;
 }
 
 interface FbmMarginState {
@@ -58,6 +59,9 @@ export function useFbmMarginData(params: FbmMarginParams) {
       qs.set('pageSize', String(p.pageSize));
       qs.set('sortBy', p.sortBy);
       qs.set('sortDir', p.sortDir);
+      if (p.includeDetails) {
+        qs.set('includeDetails', 'true');
+      }
 
       const url = `${API_BASE}/api/dashboard/fbm-margin?${qs}`;
       const response = await fetch(url, { signal: controller.signal });
@@ -94,7 +98,7 @@ export function useFbmMarginData(params: FbmMarginParams) {
     return () => {
       abortRef.current?.abort();
     };
-  }, [fetchData, params.filters, params.page, params.pageSize, params.sortBy, params.sortDir]);
+  }, [fetchData, params.filters, params.page, params.pageSize, params.sortBy, params.sortDir, params.includeDetails]);
 
   return state;
 }

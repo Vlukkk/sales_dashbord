@@ -9,6 +9,7 @@ interface FbmMarginQuery {
   pageSize?: string;
   sortBy?: string;
   sortDir?: string;
+  includeDetails?: string;
 }
 
 const ALLOWED_SORT_COLUMNS: Record<string, string> = {
@@ -16,6 +17,7 @@ const ALLOWED_SORT_COLUMNS: Record<string, string> = {
   date: 'order_date',
   channel: 'channel',
   saleGross: 'sale_gross',
+  saleNet: 'sale_net',
   costGross: 'cost_gross',
   margin: 'margin',
   marginPercent: 'margin_percent',
@@ -101,6 +103,7 @@ function buildFbmMarginQuery(params: FbmMarginQuery, filters: DashboardFilterPar
   const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
   const pageSize = Math.min(200, Math.max(1, parseInt(params.pageSize ?? '50', 10) || 50));
   const offset = (page - 1) * pageSize;
+  const includeDetails = params.includeDetails === 'true';
 
   const sortCol = ALLOWED_SORT_COLUMNS[params.sortBy ?? ''] ?? 'order_date';
   const sortDir = params.sortDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
@@ -109,6 +112,7 @@ function buildFbmMarginQuery(params: FbmMarginQuery, filters: DashboardFilterPar
   const binderOrderKeyExpr = buildOrderKeyExpr('bi.order_number');
   const orderCommissionExpr = buildCommissionExpr('os.sale_gross');
   const detailCommissionExpr = buildCommissionExpr('po.sale_gross');
+  const binderMarginEnabledExpr = `COALESCE(ba.cost_gross, 0) <> 0`;
 
   const baseCTE = `
     WITH sales_base AS (
@@ -223,23 +227,32 @@ function buildFbmMarginQuery(params: FbmMarginQuery, filters: DashboardFilterPar
         ROUND(os.refunded_gross, 2) AS refunded_gross,
         CASE WHEN ba.cost_gross IS NOT NULL THEN ROUND(ba.cost_gross, 2) ELSE NULL END AS cost_gross,
         ROUND(COALESCE(ba.shipping_gross, 0), 2) AS shipping_gross,
-        ROUND(COALESCE(ba.cost_gross, 0) / 1.19, 2) AS cost_net,
+        CASE
+          WHEN ${binderMarginEnabledExpr} THEN ROUND(COALESCE(ba.cost_gross, 0) / 1.19, 2)
+          ELSE 0
+        END AS cost_net,
         ROUND(CASE
-          WHEN os.channel = 'Amazon' THEN ${orderCommissionExpr}
+          WHEN ${binderMarginEnabledExpr} AND os.channel = 'Amazon' THEN ${orderCommissionExpr}
           ELSE 0
         END, 2) AS amazon_commission,
-        10.0 AS fixed_cost,
-        ROUND(
-          os.sale_net_raw
-          - COALESCE(ba.cost_gross, 0) / 1.19
-          - CASE
-              WHEN os.channel = 'Amazon' THEN ${orderCommissionExpr}
-              ELSE 0
-            END
-          - 10.0
-        , 2) AS margin,
         CASE
-          WHEN os.sale_net_raw > 0 THEN ROUND(
+          WHEN ${binderMarginEnabledExpr} THEN 10.0
+          ELSE 0
+        END AS fixed_cost,
+        CASE
+          WHEN ${binderMarginEnabledExpr} THEN ROUND(
+            os.sale_net_raw
+            - COALESCE(ba.cost_gross, 0) / 1.19
+            - CASE
+                WHEN os.channel = 'Amazon' THEN ${orderCommissionExpr}
+                ELSE 0
+              END
+            - 10.0
+          , 2)
+          ELSE 0
+        END AS margin,
+        CASE
+          WHEN ${binderMarginEnabledExpr} AND os.sale_net_raw > 0 THEN ROUND(
             (
               os.sale_net_raw
               - COALESCE(ba.cost_gross, 0) / 1.19
@@ -252,7 +265,7 @@ function buildFbmMarginQuery(params: FbmMarginQuery, filters: DashboardFilterPar
           , 1)
           ELSE 0
         END AS margin_percent,
-        ba.cost_gross IS NOT NULL AS has_binder_match,
+        ${binderMarginEnabledExpr} AS has_binder_match,
         os.sku_count,
         os.sales_line_count,
         COALESCE(ba.invoice_count, 0) AS invoice_count,
@@ -300,38 +313,41 @@ function buildFbmMarginQuery(params: FbmMarginQuery, filters: DashboardFilterPar
       po.cost_gross AS order_cost_gross,
       po.shipping_gross AS order_shipping_gross,
       CASE
-        WHEN po.sale_gross > 0 AND po.cost_gross IS NOT NULL
+        WHEN po.has_binder_match AND po.sale_gross > 0 AND po.cost_gross IS NOT NULL
           THEN ROUND(po.cost_gross * sb.sale_gross / po.sale_gross, 2)
-        ELSE NULL
+        ELSE 0
       END AS allocated_cost_gross,
       CASE
-        WHEN po.sale_gross > 0 THEN ROUND(po.shipping_gross * sb.sale_gross / po.sale_gross, 2)
+        WHEN po.has_binder_match AND po.sale_gross > 0 THEN ROUND(po.shipping_gross * sb.sale_gross / po.sale_gross, 2)
         ELSE 0
       END AS allocated_shipping_gross,
       CASE
-        WHEN sb.channel = 'Amazon' AND po.sale_gross > 0
+        WHEN po.has_binder_match AND sb.channel = 'Amazon' AND po.sale_gross > 0
           THEN ROUND((${detailCommissionExpr}) * sb.sale_gross / po.sale_gross, 2)
         ELSE 0
       END AS amazon_commission,
       CASE
-        WHEN po.sale_gross > 0 THEN ROUND(10.0 * sb.sale_gross / po.sale_gross, 2)
+        WHEN po.has_binder_match AND po.sale_gross > 0 THEN ROUND(10.0 * sb.sale_gross / po.sale_gross, 2)
         ELSE 0
       END AS fixed_cost,
-      ROUND(
-        sb.sale_net_raw
-        - COALESCE(po.cost_gross * sb.sale_gross / NULLIF(po.sale_gross, 0) / 1.19, 0)
-        - CASE
-            WHEN sb.channel = 'Amazon' AND po.sale_gross > 0
-              THEN (${detailCommissionExpr}) * sb.sale_gross / po.sale_gross
-            ELSE 0
-          END
-        - CASE
-            WHEN po.sale_gross > 0 THEN 10.0 * sb.sale_gross / po.sale_gross
-            ELSE 0
-          END
-      , 2) AS margin,
       CASE
-        WHEN sb.sale_net_raw > 0 THEN ROUND(
+        WHEN po.has_binder_match THEN ROUND(
+          sb.sale_net_raw
+          - COALESCE(po.cost_gross * sb.sale_gross / NULLIF(po.sale_gross, 0) / 1.19, 0)
+          - CASE
+              WHEN sb.channel = 'Amazon' AND po.sale_gross > 0
+                THEN (${detailCommissionExpr}) * sb.sale_gross / po.sale_gross
+              ELSE 0
+            END
+          - CASE
+              WHEN po.sale_gross > 0 THEN 10.0 * sb.sale_gross / po.sale_gross
+              ELSE 0
+            END
+        , 2)
+        ELSE 0
+      END AS margin,
+      CASE
+        WHEN po.has_binder_match AND sb.sale_net_raw > 0 THEN ROUND(
           (
             sb.sale_net_raw
             - COALESCE(po.cost_gross * sb.sale_gross / NULLIF(po.sale_gross, 0) / 1.19, 0)
@@ -383,7 +399,7 @@ function buildFbmMarginQuery(params: FbmMarginQuery, filters: DashboardFilterPar
 
   return {
     dataQuery,
-    detailQuery,
+    detailQuery: includeDetails ? detailQuery : null,
     summaryQuery,
     countQuery,
     values,
@@ -398,7 +414,7 @@ export async function registerFbmMarginRoutes(app: FastifyInstance) {
 
     const [dataResult, detailResult, summaryResult, countResult] = await Promise.all([
       pool.query(dataQuery, values),
-      pool.query(detailQuery, values),
+      detailQuery ? pool.query(detailQuery, values) : Promise.resolve({ rows: [] }),
       pool.query(summaryQuery, values),
       pool.query(countQuery, values),
     ]);

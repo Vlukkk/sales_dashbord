@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Button, Space, Table, Typography } from 'antd';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { Button, Segmented, Space, Table, Typography } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import type { SorterResult } from 'antd/es/table/interface';
 import dayjs from 'dayjs';
@@ -49,49 +49,77 @@ function buildFilterSummary(filters: FilterState) {
 
 const ORDER_EXPORT_COLUMNS: ExportColumn<FbmMarginRow>[] = [
   { key: 'orderNumber', header: 'Заказ', type: 'string', width: 130, value: (row) => row.orderNumber },
-  { key: 'date', header: 'Дата', type: 'string', width: 100, value: (row) => row.date ? dayjs(row.date).format('DD.MM.YYYY') : '' },
-  { key: 'channel', header: 'Канал', type: 'string', width: 80, value: (row) => row.channel },
-  { key: 'skuCount', header: 'SKU', type: 'integer', width: 50, value: (row) => row.skuCount },
-  { key: 'salesLineCount', header: 'Строки', type: 'integer', width: 55, value: (row) => row.salesLineCount },
-  { key: 'invoiceCount', header: 'Счета', type: 'integer', width: 55, value: (row) => row.invoiceCount },
-  { key: 'saleGross', header: 'Продажа брутто', type: 'currency', width: 95, value: (row) => row.saleGross },
+  { key: 'date', header: 'Дата', type: 'string', width: 90, value: (row) => row.date ? dayjs(row.date).format('DD.MM.YYYY') : '' },
+  { key: 'channel', header: 'Канал', type: 'string', width: 70, value: (row) => row.channel },
   { key: 'saleNet', header: 'Продажа нетто', type: 'currency', width: 95, value: (row) => row.saleNet },
-  { key: 'refundedGross', header: 'Возврат брутто', type: 'currency', width: 95, value: (row) => row.refundedGross },
-  { key: 'costNet', header: 'Себестоимость нетто', type: 'currency', width: 95, value: (row) => row.costNet },
+  { key: 'costNet', header: 'Binder нетто', type: 'currency', width: 95, value: (row) => row.costNet },
   { key: 'amazonCommission', header: 'Amazon commission', type: 'currency', width: 95, value: (row) => row.amazonCommission },
-  { key: 'fixedCost', header: 'Фикс. 10€', type: 'currency', width: 80, value: (row) => row.fixedCost },
-  { key: 'margin', header: 'Маржа €', type: 'currency', width: 90, value: (row) => row.margin },
-  { key: 'marginPercent', header: 'Маржа %', type: 'percent', width: 75, value: (row) => row.marginPercent },
+  { key: 'fixedCost', header: 'Фикс', type: 'currency', width: 65, value: (row) => row.fixedCost },
+  { key: 'margin', header: 'Маржа €', type: 'currency', width: 85, value: (row) => row.margin },
+  { key: 'marginPercent', header: 'Маржа %', type: 'percent', width: 70, value: (row) => row.marginPercent },
+  { key: 'invoiceNumbers', header: 'Счета Binder', type: 'string', width: 140, value: (row) => row.invoiceNumbers },
 ];
 
 const DETAIL_EXPORT_COLUMNS: ExportColumn<FbmMarginDetailRow>[] = [
   { key: 'orderNumber', header: 'Заказ', type: 'string', width: 130, value: (row) => row.orderNumber },
-  { key: 'date', header: 'Дата', type: 'string', width: 100, value: (row) => row.date ? dayjs(row.date).format('DD.MM.YYYY') : '' },
-  { key: 'status', header: 'Статус', type: 'string', width: 90, value: (row) => row.status ?? '' },
-  { key: 'channel', header: 'Канал', type: 'string', width: 80, value: (row) => row.channel },
+  { key: 'date', header: 'Дата', type: 'string', width: 90, value: (row) => row.date ? dayjs(row.date).format('DD.MM.YYYY') : '' },
   { key: 'sku', header: 'SKU', type: 'string', width: 110, value: (row) => row.sku },
   { key: 'productName', header: 'Товар', type: 'string', width: 220, value: (row) => row.productName ?? '' },
-  { key: 'qtyOrdered', header: 'Qty', type: 'integer', width: 45, value: (row) => row.qtyOrdered },
-  { key: 'qtyRefunded', header: 'Qty ref', type: 'integer', width: 55, value: (row) => row.qtyRefunded },
-  { key: 'saleGross', header: 'Продажа брутто', type: 'currency', width: 95, value: (row) => row.saleGross },
   { key: 'saleNet', header: 'Продажа нетто', type: 'currency', width: 95, value: (row) => row.saleNet },
-  { key: 'refundedGross', header: 'Возврат брутто', type: 'currency', width: 95, value: (row) => row.refundedGross },
-  { key: 'allocatedCostGross', header: 'Binder брутто', type: 'currency', width: 95, value: (row) => row.allocatedCostGross ?? 0 },
+  {
+    key: 'allocatedCostGross',
+    header: 'Binder нетто',
+    type: 'currency',
+    width: 95,
+    value: (row) => row.hasBinderMatch ? Number(((row.allocatedCostGross ?? 0) / 1.19).toFixed(2)) : 0,
+  },
   { key: 'amazonCommission', header: 'Amazon commission', type: 'currency', width: 95, value: (row) => row.amazonCommission },
-  { key: 'fixedCost', header: 'Фикс. 10€', type: 'currency', width: 80, value: (row) => row.fixedCost },
-  { key: 'margin', header: 'Маржа €', type: 'currency', width: 90, value: (row) => row.margin },
-  { key: 'marginPercent', header: 'Маржа %', type: 'percent', width: 75, value: (row) => row.marginPercent },
-  { key: 'invoiceNumbers', header: 'Счета', type: 'string', width: 130, value: (row) => row.invoiceNumbers },
-  { key: 'invoiceTypes', header: 'Типы счетов', type: 'string', width: 110, value: (row) => row.invoiceTypes },
+  { key: 'fixedCost', header: 'Фикс', type: 'currency', width: 65, value: (row) => row.fixedCost },
+  { key: 'margin', header: 'Маржа €', type: 'currency', width: 85, value: (row) => row.margin },
+  { key: 'marginPercent', header: 'Маржа %', type: 'percent', width: 70, value: (row) => row.marginPercent },
+  { key: 'invoiceNumbers', header: 'Счета Binder', type: 'string', width: 130, value: (row) => row.invoiceNumbers },
   { key: 'productCodes', header: 'Binder коды', type: 'string', width: 140, value: (row) => row.productCodes },
   { key: 'descriptions', header: 'Binder описание', type: 'string', width: 220, value: (row) => row.descriptions },
 ];
 
+const metaTextStyle: CSSProperties = {
+  fontSize: 12,
+  lineHeight: 1.35,
+  color: '#6b7280',
+};
+
+function renderOrderMeta(date: string, invoiceNumbers: string) {
+  return (
+    <div style={{ display: 'grid', gap: 2 }}>
+      <span>{date ? dayjs(date).format('DD.MM.YYYY') : '-'}</span>
+      {invoiceNumbers ? <span style={metaTextStyle}>{invoiceNumbers}</span> : null}
+    </div>
+  );
+}
+
+function renderBinderInfo(invoiceTypes: string, productCodes: string, descriptions: string) {
+  const parts = [invoiceTypes, productCodes, descriptions].filter(Boolean);
+  if (parts.length === 0) {
+    return '-';
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 2 }}>
+      {parts.map((value) => (
+        <span key={value} style={metaTextStyle}>
+          {value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function FbmMargin({ filters }: Props) {
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(10);
   const [sortBy, setSortBy] = useState('date');
   const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('DESC');
+  const [viewMode, setViewMode] = useState<'orders' | 'details'>('orders');
 
   const params = useMemo(
     () => ({
@@ -100,8 +128,9 @@ export default function FbmMargin({ filters }: Props) {
       pageSize,
       sortBy,
       sortDir,
+      includeDetails: viewMode === 'details',
     }),
-    [filters, page, pageSize, sortBy, sortDir],
+    [filters, page, pageSize, sortBy, sortDir, viewMode],
   );
 
   const { rows, detailRows, total, summary, loading } = useFbmMarginData(params);
@@ -111,118 +140,85 @@ export default function FbmMargin({ filters }: Props) {
     setPage(1);
   }, [filterSummary]);
 
+  const matchedOrders = Math.max(0, summary.orderCount - summary.unmatchedOrders);
+
   const orderColumns: ColumnsType<FbmMarginRow> = [
     {
-      title: 'Заказ',
+      title: 'Заказ / Binder',
       dataIndex: 'orderNumber',
       key: 'orderNumber',
-      width: 140,
       sorter: true,
-      render: (value: string, row) => <span style={{ opacity: row.hasBinderMatch ? 1 : 0.5 }}>{value}</span>,
+      width: 170,
+      render: (value: string, row) => (
+        <div style={{ display: 'grid', gap: 2, opacity: row.hasBinderMatch ? 1 : 0.6 }}>
+          <span style={{ fontWeight: 600 }}>{value}</span>
+          {row.invoiceNumbers ? <span style={metaTextStyle}>{row.invoiceNumbers}</span> : null}
+        </div>
+      ),
     },
     {
       title: 'Дата',
       dataIndex: 'date',
       key: 'date',
-      width: 100,
       sorter: true,
+      width: 95,
       render: (value: string) => (value ? dayjs(value).format('DD.MM.YYYY') : '-'),
     },
     {
       title: 'Канал',
       dataIndex: 'channel',
       key: 'channel',
+      sorter: true,
       width: 80,
-      sorter: true,
-    },
-    {
-      title: 'SKU',
-      dataIndex: 'skuCount',
-      key: 'skuCount',
-      width: 65,
-      align: 'right',
-      render: (value: number) => fmtNum(value),
-    },
-    {
-      title: 'Строк',
-      dataIndex: 'salesLineCount',
-      key: 'salesLineCount',
-      width: 70,
-      align: 'right',
-      render: (value: number) => fmtNum(value),
-    },
-    {
-      title: 'Счетов',
-      dataIndex: 'invoiceCount',
-      key: 'invoiceCount',
-      width: 78,
-      align: 'right',
-      render: (value: number) => fmtNum(value),
-    },
-    {
-      title: 'Продажа брутто',
-      dataIndex: 'saleGross',
-      key: 'saleGross',
-      width: 135,
-      align: 'right',
-      sorter: true,
-      render: fmtMoney,
     },
     {
       title: 'Продажа нетто',
       dataIndex: 'saleNet',
       key: 'saleNet',
-      width: 135,
+      sorter: true,
+      width: 120,
       align: 'right',
       render: fmtMoney,
-    },
-    {
-      title: 'Возврат брутто',
-      dataIndex: 'refundedGross',
-      key: 'refundedGross',
-      width: 135,
-      align: 'right',
-      render: (value: number) => (value > 0 ? fmtMoney(value) : '-'),
     },
     {
       title: 'Binder нетто',
       dataIndex: 'costNet',
       key: 'costNet',
-      width: 130,
+      width: 120,
       align: 'right',
       render: (value: number, row) => (
         <span style={{ color: row.hasBinderMatch ? undefined : '#999' }}>
-          {fmtMoney(value)}
+          {row.hasBinderMatch ? fmtMoney(value) : '-'}
         </span>
       ),
     },
     {
-      title: 'Amazon commission',
+      title: 'Commission',
       dataIndex: 'amazonCommission',
       key: 'amazonCommission',
-      width: 145,
-      align: 'right',
       sorter: true,
+      width: 115,
+      align: 'right',
       render: (value: number) => (value > 0 ? fmtMoney(value) : '-'),
     },
     {
-      title: 'Фикс. 10€',
+      title: 'Фикс',
       dataIndex: 'fixedCost',
       key: 'fixedCost',
-      width: 95,
+      width: 85,
       align: 'right',
-      render: fmtMoney,
+      render: (value: number) => (value > 0 ? fmtMoney(value) : '-'),
     },
     {
       title: 'Маржа €',
       dataIndex: 'margin',
       key: 'margin',
-      width: 120,
-      align: 'right',
       sorter: true,
-      render: (value: number) => (
-        <span style={{ color: value >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
-          {fmtMoney(value)}
+      width: 110,
+      align: 'right',
+      render: (value: number, row) => (
+        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#16a34a' : '#111827', fontWeight: 600 }}>
+          {row.hasBinderMatch ? fmtMoney(value) : '-'}
         </span>
       ),
     },
@@ -230,12 +226,12 @@ export default function FbmMargin({ filters }: Props) {
       title: 'Маржа %',
       dataIndex: 'marginPercent',
       key: 'marginPercent',
-      width: 95,
-      align: 'right',
       sorter: true,
-      render: (value: number) => (
-        <span style={{ color: value >= 0 ? '#16a34a' : '#dc2626' }}>
-          {fmtPct(value)}
+      width: 85,
+      align: 'right',
+      render: (value: number, row) => (
+        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#16a34a' : '#111827' }}>
+          {row.hasBinderMatch ? fmtPct(value) : '-'}
         </span>
       ),
     },
@@ -246,23 +242,13 @@ export default function FbmMargin({ filters }: Props) {
       title: 'Заказ',
       dataIndex: 'orderNumber',
       key: 'orderNumber',
-      width: 135,
-      fixed: 'left',
-      render: (value: string, row) => <span style={{ opacity: row.hasBinderMatch ? 1 : 0.5 }}>{value}</span>,
-    },
-    {
-      title: 'Дата',
-      dataIndex: 'date',
-      key: 'date',
-      width: 100,
-      render: (value: string) => (value ? dayjs(value).format('DD.MM.YYYY') : '-'),
-    },
-    {
-      title: 'Статус',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      render: (value: string | null) => value ?? '-',
+      width: 180,
+      render: (value: string, row) => (
+        <div style={{ display: 'grid', gap: 2, opacity: row.hasBinderMatch ? 1 : 0.6 }}>
+          <span style={{ fontWeight: 600 }}>{value}</span>
+          {renderOrderMeta(row.date, row.invoiceNumbers)}
+        </div>
+      ),
     },
     {
       title: 'SKU',
@@ -274,121 +260,62 @@ export default function FbmMargin({ filters }: Props) {
       title: 'Товар',
       dataIndex: 'productName',
       key: 'productName',
-      width: 260,
       ellipsis: true,
       render: (value: string | null) => value ?? '-',
-    },
-    {
-      title: 'Qty',
-      dataIndex: 'qtyOrdered',
-      key: 'qtyOrdered',
-      width: 70,
-      align: 'right',
-      render: (value: number) => fmtNum(value),
-    },
-    {
-      title: 'Qty ref',
-      dataIndex: 'qtyRefunded',
-      key: 'qtyRefunded',
-      width: 78,
-      align: 'right',
-      render: (value: number) => fmtNum(value),
-    },
-    {
-      title: 'Продажа брутто',
-      dataIndex: 'saleGross',
-      key: 'saleGross',
-      width: 130,
-      align: 'right',
-      render: fmtMoney,
     },
     {
       title: 'Продажа нетто',
       dataIndex: 'saleNet',
       key: 'saleNet',
-      width: 130,
+      width: 115,
       align: 'right',
       render: fmtMoney,
     },
     {
-      title: 'Binder брутто',
+      title: 'Binder нетто',
       dataIndex: 'allocatedCostGross',
       key: 'allocatedCostGross',
-      width: 130,
+      width: 115,
       align: 'right',
       render: (value: number | null, row) => (
         <span style={{ color: row.hasBinderMatch ? undefined : '#999' }}>
-          {value != null ? fmtMoney(value) : '-'}
+          {row.hasBinderMatch ? fmtMoney((value ?? 0) / 1.19) : '-'}
         </span>
       ),
     },
     {
-      title: 'Amazon commission',
+      title: 'Commission',
       dataIndex: 'amazonCommission',
       key: 'amazonCommission',
-      width: 145,
+      width: 110,
       align: 'right',
       render: (value: number) => (value > 0 ? fmtMoney(value) : '-'),
     },
     {
-      title: 'Фикс. 10€',
+      title: 'Фикс',
       dataIndex: 'fixedCost',
       key: 'fixedCost',
-      width: 95,
+      width: 85,
       align: 'right',
-      render: fmtMoney,
+      render: (value: number) => (value > 0 ? fmtMoney(value) : '-'),
     },
     {
       title: 'Маржа €',
       dataIndex: 'margin',
       key: 'margin',
-      width: 120,
-      align: 'right',
-      render: (value: number) => (
-        <span style={{ color: value >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
-          {fmtMoney(value)}
-        </span>
-      ),
-    },
-    {
-      title: 'Маржа %',
-      dataIndex: 'marginPercent',
-      key: 'marginPercent',
-      width: 95,
-      align: 'right',
-      render: (value: number) => (
-        <span style={{ color: value >= 0 ? '#16a34a' : '#dc2626' }}>
-          {fmtPct(value)}
-        </span>
-      ),
-    },
-    {
-      title: 'Счета Binder',
-      dataIndex: 'invoiceNumbers',
-      key: 'invoiceNumbers',
-      width: 170,
-      render: (value: string) => value || '-',
-    },
-    {
-      title: 'Типы',
-      dataIndex: 'invoiceTypes',
-      key: 'invoiceTypes',
       width: 110,
-      render: (value: string) => value || '-',
+      align: 'right',
+      render: (value: number, row) => (
+        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#16a34a' : '#111827', fontWeight: 600 }}>
+          {row.hasBinderMatch ? fmtMoney(value) : '-'}
+        </span>
+      ),
     },
     {
-      title: 'Binder коды',
-      dataIndex: 'productCodes',
-      key: 'productCodes',
-      width: 180,
-      render: (value: string) => value || '-',
-    },
-    {
-      title: 'Binder описание',
-      dataIndex: 'descriptions',
-      key: 'descriptions',
-      width: 260,
-      render: (value: string) => value || '-',
+      title: 'Binder',
+      key: 'binder',
+      width: 240,
+      render: (_value, row) => renderBinderInfo(row.invoiceTypes, row.productCodes, row.descriptions),
     },
   ];
 
@@ -403,13 +330,13 @@ export default function FbmMargin({ filters }: Props) {
       setSortDir(resolvedSorter.order === 'ascend' ? 'ASC' : 'DESC');
     }
     setPage(pagination.current ?? 1);
-    setPageSize(pagination.pageSize ?? 50);
+    setPageSize(pagination.pageSize ?? 10);
   };
 
   const exportSubtitle = filterSummary;
 
   const handleExportExcel = () => {
-    downloadExcelWorkbook<any>('fbm-margin.xls', [
+    const sheets: any[] = [
       {
         title: 'FBM Маржа',
         worksheetName: 'FBM Margin',
@@ -417,14 +344,19 @@ export default function FbmMargin({ filters }: Props) {
         columns: ORDER_EXPORT_COLUMNS,
         rows,
       },
-      {
+    ];
+
+    if (detailRows.length > 0) {
+      sheets.push({
         title: 'FBM Маржа · детали',
         worksheetName: 'FBM Details',
-        subtitle: `Детализация по заказам на текущей странице: ${exportSubtitle}`,
+        subtitle: `Детализация по текущей странице: ${exportSubtitle}`,
         columns: DETAIL_EXPORT_COLUMNS,
         rows: detailRows,
-      },
-    ]);
+      });
+    }
+
+    downloadExcelWorkbook<any>('fbm-margin.xls', sheets);
   };
 
   const handleExportCsv = () => {
@@ -438,9 +370,20 @@ export default function FbmMargin({ filters }: Props) {
     });
   };
 
+  const metrics = [
+    { label: 'С Binder', value: `${fmtNum(matchedOrders)} / ${fmtNum(summary.orderCount)}` },
+    { label: 'Выручка нетто', value: fmtMoney(summary.totalRevenue) },
+    { label: 'Себестоимость', value: fmtMoney(summary.totalCost) },
+    {
+      label: 'Маржа',
+      value: fmtMoney(summary.totalMargin),
+      color: summary.totalMargin >= 0 ? '#16a34a' : '#dc2626',
+    },
+  ];
+
   return (
-    <div style={{ padding: '0 0 24px', display: 'grid', gap: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 0 }}>
+    <div style={{ padding: '0 0 12px', display: 'grid', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <Typography.Text type="secondary">{filterSummary}</Typography.Text>
         <Space>
           <Button size="small" onClick={handleExportCsv} disabled={rows.length === 0}>
@@ -452,91 +395,73 @@ export default function FbmMargin({ filters }: Props) {
         </Space>
       </div>
 
-      <div className="bento">
-        <div className="bento__item">
-          <span className="bento__label">Заказы</span>
-          <span className="bento__value">{fmtNum(summary.orderCount)}</span>
-        </div>
-        <div className="bento__item">
-          <span className="bento__label">Выручка нетто</span>
-          <span className="bento__value">{fmtMoney(summary.totalRevenue)}</span>
-        </div>
-        <div className="bento__item">
-          <span className="bento__label">Себестоимость</span>
-          <span className="bento__value">{fmtMoney(summary.totalCost)}</span>
-        </div>
-        <div className="bento__item">
-          <span className="bento__label">Amazon commission</span>
-          <span className="bento__value">{fmtMoney(summary.totalCommission)}</span>
-        </div>
-        <div className="bento__item">
-          <span className="bento__label">Общая маржа</span>
-          <span className="bento__value" style={{ color: summary.totalMargin >= 0 ? '#16a34a' : '#dc2626' }}>
-            {fmtMoney(summary.totalMargin)}
-          </span>
-        </div>
-        <div className="bento__item">
-          <span className="bento__label">Средняя маржа</span>
-          <span className="bento__value" style={{ color: summary.avgMarginPercent >= 0 ? '#16a34a' : '#dc2626' }}>
-            {fmtPct(summary.avgMarginPercent)}
-          </span>
-        </div>
-        {summary.unmatchedOrders > 0 && (
-          <div className="bento__item">
-            <span className="bento__label">Без Binder</span>
-            <span className="bento__value" style={{ color: '#f59e0b' }}>
-              {fmtNum(summary.unmatchedOrders)}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+          gap: 10,
+        }}
+      >
+        {metrics.map((metric) => (
+          <div
+            key={metric.label}
+            className="card"
+            style={{ padding: '10px 12px', minHeight: 0, display: 'grid', gap: 4 }}
+          >
+            <span className="bento__label">{metric.label}</span>
+            <span className="bento__value" style={{ fontSize: 22, color: metric.color }}>
+              {metric.value}
             </span>
           </div>
+        ))}
+      </div>
+
+      <div className="card">
+        <div className="card__header" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h3 style={{ marginBottom: 4 }}>FBM Margin</h3>
+            <Typography.Text type="secondary">
+              В этой версии маржа считается только для заказов, у которых есть счёт Binder.
+            </Typography.Text>
+          </div>
+          <Segmented
+            size="small"
+            value={viewMode}
+            onChange={(value) => setViewMode(value as 'orders' | 'details')}
+            options={[
+              { label: 'Заказы', value: 'orders' },
+              { label: 'Детали', value: 'details' },
+            ]}
+          />
+        </div>
+
+        {viewMode === 'orders' ? (
+          <Table<FbmMarginRow>
+            dataSource={rows}
+            columns={orderColumns}
+            rowKey="orderNumber"
+            loading={loading}
+            size="small"
+            onChange={handleTableChange}
+            pagination={{
+              current: page,
+              pageSize,
+              total,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50'],
+              showTotal: (value) => `${value} заказов`,
+            }}
+          />
+        ) : (
+          <Table<FbmMarginDetailRow>
+            dataSource={detailRows}
+            columns={detailColumns}
+            rowKey="rowKey"
+            loading={loading}
+            size="small"
+            pagination={false}
+          />
         )}
-      </div>
-
-      <div className="card">
-        <div className="card__header">
-          <div>
-            <h3>FBM Margin</h3>
-            <Typography.Text type="secondary">
-              Маржа = Продажа без НДС - Binder без НДС - Amazon commission - фиксированные 10€
-            </Typography.Text>
-          </div>
-        </div>
-        <Table<FbmMarginRow>
-          dataSource={rows}
-          columns={orderColumns}
-          rowKey="orderNumber"
-          loading={loading}
-          size="small"
-          scroll={{ x: 1550 }}
-          onChange={handleTableChange}
-          pagination={{
-            current: page,
-            pageSize,
-            total,
-            showSizeChanger: true,
-            pageSizeOptions: ['25', '50', '100'],
-            showTotal: (value) => `${value} заказов`,
-          }}
-        />
-      </div>
-
-      <div className="card">
-        <div className="card__header">
-          <div>
-            <h3>Полная информация</h3>
-            <Typography.Text type="secondary">
-              Детализация по SKU и строкам Edelind для заказов с текущей страницы FBM Margin.
-            </Typography.Text>
-          </div>
-        </div>
-        <Table<FbmMarginDetailRow>
-          dataSource={detailRows}
-          columns={detailColumns}
-          rowKey="rowKey"
-          loading={loading}
-          size="small"
-          pagination={false}
-          scroll={{ x: 2600, y: 520 }}
-        />
       </div>
     </div>
   );
