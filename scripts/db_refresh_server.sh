@@ -9,6 +9,7 @@ RAW_DATA_DIR="${RAW_DATA_DIR:-$APP_DIR/raw}"
 SALES_DATA_DIR="${SALES_DATA_DIR:-$RAW_DATA_DIR/sales}"
 MASTER_DATA_DIR="${MASTER_DATA_DIR:-$RAW_DATA_DIR/master}"
 INVENTORY_DATA_DIR="${INVENTORY_DATA_DIR:-$RAW_DATA_DIR/inventory}"
+BINDER_DATA_DIR="${BINDER_DATA_DIR:-$RAW_DATA_DIR/orders}"
 VENV_DIR="${VENV_DIR:-$APP_DIR/.venv}"
 DATABASE_URL="${DATABASE_URL:-}"
 
@@ -25,10 +26,11 @@ fi
 DATABASE_URL="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/sales_dashboard}"
 
 echo "==> Ensure raw data directories"
-mkdir -p "$SALES_DATA_DIR" "$MASTER_DATA_DIR" "$INVENTORY_DATA_DIR"
+mkdir -p "$SALES_DATA_DIR" "$MASTER_DATA_DIR" "$INVENTORY_DATA_DIR" "$BINDER_DATA_DIR"
 echo "Sales data dir: $SALES_DATA_DIR"
 echo "Master data dir: $MASTER_DATA_DIR"
 echo "Inventory data dir: $INVENTORY_DATA_DIR"
+echo "Binder data dir: $BINDER_DATA_DIR"
 
 echo "==> Ensure Python environment"
 if [ ! -d "$VENV_DIR" ]; then
@@ -45,6 +47,7 @@ RAW_DATA_DIR="$RAW_DATA_DIR" \
 SALES_DATA_DIR="$SALES_DATA_DIR" \
 MASTER_DATA_DIR="$MASTER_DATA_DIR" \
 INVENTORY_DATA_DIR="$INVENTORY_DATA_DIR" \
+BINDER_DATA_DIR="$BINDER_DATA_DIR" \
 python3 - <<'PY'
 from pathlib import Path
 import sys
@@ -94,6 +97,7 @@ RAW_DATA_DIR="$RAW_DATA_DIR" \
 SALES_DATA_DIR="$SALES_DATA_DIR" \
 MASTER_DATA_DIR="$MASTER_DATA_DIR" \
 INVENTORY_DATA_DIR="$INVENTORY_DATA_DIR" \
+BINDER_DATA_DIR="$BINDER_DATA_DIR" \
 DATABASE_URL="$DATABASE_URL" \
 python3 "$APP_DIR/scripts/import_to_postgres.py"
 
@@ -107,6 +111,7 @@ queries = [
     ("skus", "select count(*) from skus"),
     ("suppliers", "select count(*) from suppliers"),
     ("latest_snapshot", "select max(snapshot_date)::text from inventory_snapshots"),
+    ("binder_invoices", "select count(*) from binder_invoices"),
 ]
 
 with psycopg.connect(os.environ["DATABASE_URL"]) as conn:

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Spin, Typography } from 'antd';
+import { Spin, Tabs, Typography } from 'antd';
 import DashboardSidebar from './components/DashboardSidebar/DashboardSidebar';
 import Overview from './components/Overview/Overview';
 import AggregatedTables from './components/AggregatedTables/AggregatedTables';
+import FbmMargin from './components/FbmMargin/FbmMargin';
 import SkuInfoCard from './components/SkuInfoCard/SkuInfoCard';
 import { useData } from './hooks/useData';
 import { useDashboardAnalytics } from './hooks/useDashboardAnalytics';
@@ -14,6 +15,7 @@ function StaticDashboardApp() {
   const { sales, catalog, inventory, loading, error } = useData();
   const { filters, updateFilter, resetFilters, filteredSales } = useFilters(sales, catalog);
   const [selectedSku, setSelectedSku] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   const analytics = useDashboardAnalytics({
     sales,
@@ -51,20 +53,38 @@ function StaticDashboardApp() {
       />
 
       <main className="dashboard-main">
-        <Overview
-          visibleSales={analytics.visibleSales}
-          comparisonSales={analytics.comparisonSales}
-          summary={analytics.filteredSummary}
-          inventorySummary={analytics.inventorySummary}
-          filters={filters}
-        />
-
-        <AggregatedTables
-          visibleSales={analytics.visibleSales}
-          inventory={inventory}
-          catalog={catalog}
-          filters={filters}
-          onSelectSku={setSelectedSku}
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'dashboard',
+              label: 'Dashboard',
+              children: (
+                <>
+                  <Overview
+                    visibleSales={analytics.visibleSales}
+                    comparisonSales={analytics.comparisonSales}
+                    summary={analytics.filteredSummary}
+                    inventorySummary={analytics.inventorySummary}
+                    filters={filters}
+                  />
+                  <AggregatedTables
+                    visibleSales={analytics.visibleSales}
+                    inventory={inventory}
+                    catalog={catalog}
+                    filters={filters}
+                    onSelectSku={setSelectedSku}
+                  />
+                </>
+              ),
+            },
+            {
+              key: 'fbm-margin',
+              label: 'FBM Margin',
+              children: <FbmMargin filters={filters} />,
+            },
+          ]}
         />
       </main>
 
@@ -84,6 +104,7 @@ function ApiDashboardApp() {
   const { filters, updateFilter, resetFilters } = useServerFilters(filterOptions);
   const dashboard = useDashboardData(filters);
   const [selectedSku, setSelectedSku] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   if (loading) {
     return (
@@ -114,22 +135,40 @@ function ApiDashboardApp() {
       />
 
       <main className="dashboard-main">
-        <Overview
-          mode="api"
-          summary={dashboard.summary}
-          previousSummary={dashboard.previousSummary}
-          inventorySummary={dashboard.inventorySummary}
-          filters={filters}
-          amazonSeries={dashboard.amazonSeries}
-          retailSeries={dashboard.retailSeries}
-        />
-
-        <AggregatedTables
-          inventory={inventory}
-          catalog={catalog}
-          filters={filters}
-          enabled={dashboard.initialized}
-          onSelectSku={setSelectedSku}
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'dashboard',
+              label: 'Dashboard',
+              children: (
+                <>
+                  <Overview
+                    mode="api"
+                    summary={dashboard.summary}
+                    previousSummary={dashboard.previousSummary}
+                    inventorySummary={dashboard.inventorySummary}
+                    filters={filters}
+                    amazonSeries={dashboard.amazonSeries}
+                    retailSeries={dashboard.retailSeries}
+                  />
+                  <AggregatedTables
+                    inventory={inventory}
+                    catalog={catalog}
+                    filters={filters}
+                    enabled={dashboard.initialized}
+                    onSelectSku={setSelectedSku}
+                  />
+                </>
+              ),
+            },
+            {
+              key: 'fbm-margin',
+              label: 'FBM Margin',
+              children: <FbmMargin filters={filters} />,
+            },
+          ]}
         />
       </main>
 

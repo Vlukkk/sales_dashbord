@@ -60,7 +60,7 @@ function matchesFilters(sale: EnrichedSale, filters: FilterState, options: Match
     }
   }
 
-  if (!options.ignoreSku && filters.artikelposition && sale.artikelposition !== filters.artikelposition) {
+  if (!options.ignoreSku && filters.artikelposition.length > 0 && (!sale.artikelposition || !filters.artikelposition.includes(sale.artikelposition))) {
     return false;
   }
 
@@ -98,8 +98,8 @@ function buildActiveChips(filters: FilterState, dateWindowLabel: string) {
     chips.push(`Parent: ${filters.parentSku.join(', ')}`);
   }
 
-  if (filters.artikelposition) {
-    chips.push(`SKU: ${filters.artikelposition}`);
+  if (filters.artikelposition.length > 0) {
+    chips.push(`SKU: ${filters.artikelposition.join(', ')}`);
   }
 
   return chips;
@@ -162,7 +162,7 @@ export function useDashboardAnalytics({
   );
   const dateWindowLabel = useMemo(() => getDateWindowLabel(visibleSales), [visibleSales]);
 
-  const selectedSku = filters.artikelposition || null;
+  const selectedSku = filters.artikelposition.length === 1 ? filters.artikelposition[0] : null;
   const selectedParentSku = filters.parentSku.length === 1 ? filters.parentSku[0] : null;
   const selectedLieferant = filters.lieferant.length === 1 ? filters.lieferant[0] : null;
 

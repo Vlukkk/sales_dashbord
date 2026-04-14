@@ -120,8 +120,10 @@ export default function FilterPanel({
           showSearch
           placeholder="SKU eingeben..."
           style={{ width: '100%' }}
-          value={filters.artikelposition || undefined}
-          onChange={(v) => onFilterChange('artikelposition', v || '')}
+          mode="multiple"
+          value={filters.artikelposition}
+          onChange={(v) => onFilterChange('artikelposition', v)}
+          maxTagCount="responsive"
           filterOption={(input, option) =>
             (option?.label as string)?.toLowerCase().includes(input.toLowerCase()) ?? false
           }

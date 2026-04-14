@@ -15,7 +15,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - runtime dependency
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SCHEMA_PATH = BASE_DIR / "backend" / "sql" / "001_init.sql"
+SQL_DIR = BASE_DIR / "backend" / "sql"
 
 
 def main() -> None:
@@ -23,16 +23,18 @@ def main() -> None:
     if not database_url:
         raise SystemExit("DATABASE_URL is required")
 
-    if not SCHEMA_PATH.exists():
-        raise SystemExit(f"Schema file not found: {SCHEMA_PATH}")
-
-    sql = SCHEMA_PATH.read_text(encoding="utf-8")
+    sql_files = sorted(SQL_DIR.glob("*.sql"))
+    if not sql_files:
+        raise SystemExit(f"No SQL files found in {SQL_DIR}")
 
     with psycopg.connect(database_url, autocommit=True) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql)
+            for sql_path in sql_files:
+                sql = sql_path.read_text(encoding="utf-8")
+                cur.execute(sql)
+                print(f"Applied {sql_path.name}")
 
-    print(f"PostgreSQL schema applied from {SCHEMA_PATH}")
+    print(f"PostgreSQL schema applied ({len(sql_files)} files from {SQL_DIR})")
 
 
 if __name__ == "__main__":

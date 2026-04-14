@@ -7,7 +7,7 @@ const emptyFilters: FilterState = {
   status: [],
   channel: [],
   dateRange: null,
-  artikelposition: '',
+  artikelposition: [],
   kundengruppe: [],
   parentSku: [],
   lieferant: [],
@@ -19,7 +19,7 @@ function isEmptyFilters(filters: FilterState) {
     && filters.status.length === 0
     && filters.channel.length === 0
     && filters.dateRange === null
-    && filters.artikelposition === ''
+    && filters.artikelposition.length === 0
     && filters.kundengruppe.length === 0
     && filters.parentSku.length === 0
     && filters.lieferant.length === 0
@@ -108,8 +108,8 @@ export function serializeFilters(filters: FilterState): URLSearchParams {
     params.set('lieferant', filters.lieferant.join(','));
   }
 
-  if (filters.artikelposition) {
-    params.set('artikelposition', filters.artikelposition);
+  if (filters.artikelposition.length > 0) {
+    params.set('artikelposition', filters.artikelposition.join(','));
   }
 
   if (filters.bestellungNr) {

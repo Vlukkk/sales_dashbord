@@ -181,7 +181,7 @@ export function useDashboardData(filters: FilterState) {
       clearTimeout(timerRef.current);
     }
 
-    const hasTextFilter = Boolean(filters.bestellungNr || filters.artikelposition);
+    const hasTextFilter = Boolean(filters.bestellungNr);
     timerRef.current = setTimeout(() => {
       void fetchAll(filters);
     }, hasTextFilter ? 300 : 50);

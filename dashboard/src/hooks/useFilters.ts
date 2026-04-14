@@ -8,7 +8,7 @@ const emptyFilters: FilterState = {
   status: [],
   channel: [],
   dateRange: null,
-  artikelposition: '',
+  artikelposition: [],
   kundengruppe: [],
   parentSku: [],
   lieferant: [],
@@ -20,7 +20,7 @@ function isEmptyFilters(filters: FilterState) {
     && filters.status.length === 0
     && filters.channel.length === 0
     && filters.dateRange === null
-    && filters.artikelposition === ''
+    && filters.artikelposition.length === 0
     && filters.kundengruppe.length === 0
     && filters.parentSku.length === 0
     && filters.lieferant.length === 0
@@ -112,9 +112,9 @@ export function useFilters(sales: SaleRecord[], catalog: CatalogData) {
       });
     }
 
-    if (filters.artikelposition) {
-      const q = filters.artikelposition.toLowerCase();
-      result = result.filter((s) => s.artikelposition?.toLowerCase().includes(q));
+    if (filters.artikelposition.length > 0) {
+      const skuSet = new Set(filters.artikelposition);
+      result = result.filter((s) => s.artikelposition && skuSet.has(s.artikelposition));
     }
 
     if (filters.kundengruppe.length > 0) {

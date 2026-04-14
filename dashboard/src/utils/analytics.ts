@@ -304,9 +304,8 @@ export function summarizeInventory(sales: EnrichedSale[], inventory: InventoryDa
 }
 
 function matchesInventoryProductFilters(sku: string, product: Product | null, filters: FilterState) {
-  if (filters.artikelposition) {
-    const query = filters.artikelposition.toLowerCase();
-    if (!sku.toLowerCase().includes(query)) {
+  if (filters.artikelposition.length > 0) {
+    if (!filters.artikelposition.includes(sku)) {
       return false;
     }
   }

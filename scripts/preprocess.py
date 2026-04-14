@@ -138,6 +138,21 @@ def resolve_latest_inventory_txt() -> Path:
     return candidates[-1]
 
 
+BINDER_DATA_DIR = Path(os.environ.get("BINDER_DATA_DIR", RAW_DATA_DIR / "orders"))
+
+
+def discover_binder_xlsx_files() -> List[Path]:
+    if BINDER_DATA_DIR.exists():
+        candidates = sorted(BINDER_DATA_DIR.glob("*.xlsx"))
+        if candidates:
+            return candidates
+    fallback = sorted(BASE_DIR.glob("output.xlsx"))
+    return fallback
+
+
+BINDER_XLSX_FILES = discover_binder_xlsx_files()
+BINDER_XLSX = BINDER_XLSX_FILES[0] if BINDER_XLSX_FILES else None
+
 CATALOG_XLSX = resolve_existing_path(
     "CATALOG_XLSX_PATH",
     [
@@ -510,6 +525,93 @@ def parse_inventory():
         "records": records,
         "totals": totals,
     }
+
+
+BINDER_KEY_MAP = {
+    "kunde": "kunde",
+    "rechnungart": "invoice_type",
+    "invoice_number": "invoice_number",
+    "invoice_date": "invoice_date",
+    "order_number": "order_number",
+    "text": "description",
+    "product_codes": "product_codes",
+    "total_amount": "total_amount",
+    "versandspesen": "shipping_cost",
+}
+
+
+def parse_binder_date(val: Optional[str]) -> Optional[str]:
+    if not val:
+        return None
+    m = re.match(r"(\d{2})\.(\d{2})\.(\d{4})", str(val).strip())
+    if m:
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    return val
+
+
+def parse_binder_invoices(source_path: Path) -> List[Dict[str, Any]]:
+    wb = openpyxl.load_workbook(source_path, read_only=True, data_only=True)
+    ws = wb.active
+    rows_iter = ws.iter_rows(values_only=True)
+    header = next(rows_iter, None)
+    if not header:
+        wb.close()
+        return []
+
+    header_names = [str(h).strip().lower() if h else "" for h in header]
+    col_map: Dict[str, int] = {}
+    for xlsx_col, key in BINDER_KEY_MAP.items():
+        for i, h in enumerate(header_names):
+            if h == xlsx_col.lower():
+                col_map[key] = i
+                break
+
+    records: List[Dict[str, Any]] = []
+    for row in rows_iter:
+        if not row or all(cell is None for cell in row):
+            continue
+
+        first_value = str(row[0]).strip().lower() if row and row[0] is not None else ""
+        if first_value in {"total", "summe"}:
+            continue
+
+        record: Dict[str, Any] = {}
+        for key, idx in col_map.items():
+            val = row[idx] if idx < len(row) else None
+            if key == "kunde":
+                if val is None:
+                    record[key] = None
+                else:
+                    try:
+                        record[key] = int(val)
+                    except (TypeError, ValueError):
+                        record[key] = None
+            elif key in ("total_amount", "shipping_cost"):
+                record[key] = parse_money(val)
+            elif key == "invoice_date":
+                record[key] = parse_binder_date(str(val) if val else None)
+            elif key == "invoice_number":
+                record[key] = str(int(val)) if isinstance(val, float) and val == val else (str(val).strip() if val else None)
+            else:
+                record[key] = str(val).strip() if val is not None else None
+
+        if not record.get("invoice_type"):
+            continue
+
+        records.append(record)
+
+    wb.close()
+
+    type_counts: Dict[str, int] = {}
+    for r in records:
+        t = r.get("invoice_type", "?")
+        type_counts[t] = type_counts.get(t, 0) + 1
+    with_order = sum(1 for r in records if r.get("order_number"))
+
+    print(f"Binder invoices: {len(records)} rows from {source_path.name}")
+    print(f"  With order_number: {with_order}")
+    print(f"  By type: {type_counts}")
+    return records
 
 
 def main():

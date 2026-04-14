@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Button, Collapse, DatePicker, Select } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -73,6 +73,28 @@ export default function DashboardSidebar({
     const anchorYear = years.length > 0 ? Math.max(...years) : dayjs().year();
     return [anchorYear - 2, anchorYear - 1, anchorYear];
   }, [filterOptions?.maxDate, sales]);
+  const [skuSearch, setSkuSearch] = useState('');
+  const matchedSkus = useMemo(() => {
+    const query = skuSearch.trim().toLowerCase();
+    if (!query) {
+      return [];
+    }
+
+    return skuOptions.filter((sku) => sku.toLowerCase().includes(query));
+  }, [skuOptions, skuSearch]);
+  const matchedSkusToAppend = useMemo(
+    () => matchedSkus.filter((sku) => !filters.artikelposition.includes(sku)),
+    [filters.artikelposition, matchedSkus],
+  );
+  const handleAppendMatchedSkus = useCallback(() => {
+    if (matchedSkusToAppend.length === 0) {
+      return;
+    }
+
+    onFilterChange('artikelposition', [...filters.artikelposition, ...matchedSkusToAppend]);
+    setSkuSearch('');
+  }, [filters.artikelposition, matchedSkusToAppend, onFilterChange]);
+
   const handleLieferantToggle = useCallback((lieferant: string) => {
     const nextValues = filters.lieferant.includes(lieferant)
       ? filters.lieferant.filter((value) => value !== lieferant)
@@ -135,14 +157,28 @@ export default function DashboardSidebar({
         <div className="sidebar-field">
           <div className="sidebar-label">SKU</div>
           <Select
+            mode="multiple"
             showSearch
             allowClear
-            value={filters.artikelposition || undefined}
-            onChange={(value) => onFilterChange('artikelposition', value || '')}
+            value={filters.artikelposition}
+            onChange={(value) => onFilterChange('artikelposition', value)}
+            searchValue={skuSearch}
+            onSearch={setSkuSearch}
+            filterOption={(input, option) =>
+              (option?.label as string)?.toLowerCase().includes(input.toLowerCase()) ?? false
+            }
             options={skuOptions.map((value) => ({ label: value, value }))}
             placeholder="Поиск SKU"
             style={{ width: '100%' }}
+            maxTagCount="responsive"
           />
+          <Button
+            size="small"
+            disabled={matchedSkusToAppend.length === 0}
+            onClick={handleAppendMatchedSkus}
+          >
+            Добавить найденные {matchedSkusToAppend.length > 0 ? `(${matchedSkusToAppend.length})` : ''}
+          </Button>
         </div>
 
         <div className="sidebar-field">

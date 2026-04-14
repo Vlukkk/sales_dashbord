@@ -6,6 +6,7 @@ import { registerDashboardRoutes } from './routes/dashboard.js';
 import { registerHealthRoute } from './routes/health.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerInventoryRoutes } from './routes/inventory.js';
+import { registerFbmMarginRoutes } from './routes/fbm-margin.js';
 import { registerMetaRoutes } from './routes/meta.js';
 
 async function buildServer() {
@@ -22,6 +23,7 @@ async function buildServer() {
   await registerMetaRoutes(app);
   await registerImportRoutes(app);
   await registerInventoryRoutes(app);
+  await registerFbmMarginRoutes(app);
 
   app.addHook('onClose', async () => {
     await closePool();

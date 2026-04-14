@@ -94,7 +94,7 @@ export interface FilterState {
   status: string[];
   channel: string[];
   dateRange: [string, string] | null;
-  artikelposition: string;
+  artikelposition: string[];
   kundengruppe: string[];
   parentSku: string[];
   lieferant: string[];
@@ -181,4 +181,70 @@ export interface LieferantSeries {
   totalUnits: number;
   dailyRevenue: number[];
   dailyUnits: number[];
+}
+
+export interface FbmMarginRow {
+  orderKey: string;
+  orderNumber: string;
+  date: string;
+  channel: string;
+  saleGross: number;
+  saleNet: number;
+  refundedGross: number;
+  costGross: number | null;
+  shippingGross: number;
+  costNet: number;
+  amazonCommission: number;
+  fixedCost: number;
+  margin: number;
+  marginPercent: number;
+  hasBinderMatch: boolean;
+  skuCount: number;
+  salesLineCount: number;
+  invoiceCount: number;
+  invoiceNumbers: string;
+  invoiceTypes: string;
+  productCodes: string;
+  descriptions: string;
+}
+
+export interface FbmMarginDetailRow {
+  rowKey: string;
+  orderKey: string;
+  orderNumber: string;
+  date: string;
+  status: string | null;
+  channel: string;
+  sku: string;
+  productName: string | null;
+  qtyOrdered: number;
+  qtyRefunded: number;
+  saleGross: number;
+  saleNet: number;
+  refundedGross: number;
+  orderCostGross: number | null;
+  orderShippingGross: number;
+  allocatedCostGross: number | null;
+  allocatedShippingGross: number;
+  amazonCommission: number;
+  fixedCost: number;
+  margin: number;
+  marginPercent: number;
+  invoiceCount: number;
+  invoiceNumbers: string;
+  invoiceTypes: string;
+  productCodes: string;
+  descriptions: string;
+  hasBinderMatch: boolean;
+}
+
+export interface FbmMarginSummary {
+  totalMargin: number;
+  avgMarginPercent: number;
+  orderCount: number;
+  totalRevenue: number;
+  totalCost: number;
+  totalCommission: number;
+  totalShipping: number;
+  unmatchedOrders: number;
 }

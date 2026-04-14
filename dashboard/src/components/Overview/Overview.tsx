@@ -89,7 +89,7 @@ export default function Overview(props: Props) {
       rows: 0,
     };
     const refundRate = props.summary.units > 0 ? (props.summary.refundedUnits / props.summary.units) * 100 : 0;
-    const showSelectionHeadline = props.filters.parentSku.length > 0 || !!props.filters.artikelposition;
+    const showSelectionHeadline = props.filters.parentSku.length > 0 || props.filters.artikelposition.length > 0;
     const selectionStats = {
       skus: props.summary.activeSkus,
       refunds: props.summary.refundedUnits,
@@ -130,9 +130,9 @@ export default function Overview(props: Props) {
             <span className="bento__note">{props.inventorySummary.skusWithStock} SKUs</span>
           </div>
           <div className="bento__item">
-            <span className="bento__label">Низкий остаток</span>
-            <span className="bento__value">{fmtNum(props.inventorySummary.lowStockSkus)}</span>
-            <span className="bento__note">SKUs ≤ 3 шт</span>
+            <span className="bento__label">Остаток</span>
+            <span className="bento__value">{fmtNum(props.inventorySummary.total)}</span>
+            <span className="bento__note">{props.inventorySummary.trackedSkus} SKUs</span>
           </div>
         </div>
 
@@ -236,9 +236,9 @@ export default function Overview(props: Props) {
           <span className="bento__note">{props.inventorySummary.skusWithStock} SKUs</span>
         </div>
         <div className="bento__item">
-          <span className="bento__label">Низкий остаток</span>
-          <span className="bento__value">{fmtNum(props.inventorySummary.lowStockSkus)}</span>
-          <span className="bento__note">SKUs ≤ 3 шт</span>
+          <span className="bento__label">Остаток</span>
+          <span className="bento__value">{fmtNum(props.inventorySummary.total)}</span>
+          <span className="bento__note">{props.inventorySummary.trackedSkus} SKUs</span>
         </div>
       </div>
 

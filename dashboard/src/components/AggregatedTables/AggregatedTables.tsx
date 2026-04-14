@@ -45,22 +45,25 @@ const fmtMoney = (v: number) =>
   new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(v);
 
 const EXPORT_COLUMNS: ExportColumn<ScopeRow>[] = [
-  { key: 'label', header: 'Позиция', type: 'string', width: 120, value: (row) => row.label },
-  { key: 'lieferant', header: 'Поставщик', type: 'string', width: 140, value: (row) => row.lieferant ?? 'Без поставщика' },
-  { key: 'units', header: 'Продано', type: 'integer', width: 70, value: (row) => row.units },
-  { key: 'refundedUnits', header: 'Возвраты', type: 'integer', width: 70, value: (row) => row.refundedUnits },
-  { key: 'refundRate', header: '% возвр.', type: 'percent', width: 70, value: (row) => row.refundRate },
-  { key: 'revenue', header: 'Сумма продаж', type: 'currency', width: 90, value: (row) => row.revenue },
-  { key: 'stockSellable', header: 'FBA остаток', type: 'integer', width: 80, value: (row) => row.stockSellable },
+  { key: 'label', header: 'Позиция', type: 'string', width: 140, value: (row) => row.label },
+  { key: 'lieferant', header: 'Поставщик', type: 'string', width: 110, value: (row) => row.lieferant ?? 'Без поставщика' },
+  { key: 'units', header: 'Продано', type: 'integer', width: 65, value: (row) => row.units },
+  { key: 'refundedUnits', header: 'Возвраты', type: 'integer', width: 65, value: (row) => row.refundedUnits },
+  { key: 'refundRate', header: '% возвр.', type: 'percent', width: 65, value: (row) => row.refundRate },
+  { key: 'revenue', header: 'Продажи', type: 'currency', width: 90, value: (row) => row.revenue },
+  { key: 'profit', header: 'Маржа €', type: 'currency', width: 90, value: (row) => row.profit },
+  { key: 'margin', header: 'Маржа %', type: 'percent', width: 65, value: (row) => row.margin },
+  { key: 'stockSellable', header: 'Остаток', type: 'integer', width: 70, value: (row) => row.stockSellable },
 ];
 
 function makeColumns(labelTitle: string): ColumnsType<ScopeRow> {
   return [
-    { title: labelTitle, dataIndex: 'label', key: 'label', render: (v: string) => <strong>{v}</strong> },
+    { title: labelTitle, dataIndex: 'label', key: 'label', width: '20%', render: (v: string) => <strong>{v}</strong> },
     {
       title: 'Поставщик',
       dataIndex: 'lieferant',
       key: 'lieferant',
+      width: '14%',
       sorter: (a, b) => (a.lieferant ?? '').localeCompare(b.lieferant ?? ''),
       render: (value: string | null) => value ?? 'Без поставщика',
       ellipsis: true,
@@ -69,6 +72,7 @@ function makeColumns(labelTitle: string): ColumnsType<ScopeRow> {
       title: 'Продано',
       dataIndex: 'units',
       key: 'units',
+      width: '8%',
       align: 'right',
       sorter: (a, b) => a.units - b.units,
       render: (v: number) => <span className="cell-num">{fmtNum(v)}</span>,
@@ -77,6 +81,7 @@ function makeColumns(labelTitle: string): ColumnsType<ScopeRow> {
       title: 'Возвраты',
       dataIndex: 'refundedUnits',
       key: 'refundedUnits',
+      width: '8%',
       align: 'right',
       sorter: (a, b) => a.refundedUnits - b.refundedUnits,
       render: (v: number) => <span className="cell-num">{fmtNum(v)}</span>,
@@ -85,6 +90,7 @@ function makeColumns(labelTitle: string): ColumnsType<ScopeRow> {
       title: '% возвр.',
       dataIndex: 'refundRate',
       key: 'refundRate',
+      width: '8%',
       align: 'right',
       sorter: (a, b) => a.refundRate - b.refundRate,
       render: (v: number) => (
@@ -92,17 +98,45 @@ function makeColumns(labelTitle: string): ColumnsType<ScopeRow> {
       ),
     },
     {
-      title: 'Сумма продаж',
+      title: 'Продажи',
       dataIndex: 'revenue',
       key: 'revenue',
+      width: '13%',
       align: 'right',
       sorter: (a, b) => a.revenue - b.revenue,
       render: (v: number) => <span className="cell-num">{fmtMoney(v)}</span>,
     },
     {
-      title: 'FBA остаток',
+      title: 'Маржа €',
+      dataIndex: 'profit',
+      key: 'profit',
+      width: '13%',
+      align: 'right',
+      sorter: (a, b) => a.profit - b.profit,
+      render: (v: number) => (
+        <span className="cell-num" style={{ color: v >= 0 ? '#16a34a' : '#dc2626' }}>
+          {fmtMoney(v)}
+        </span>
+      ),
+    },
+    {
+      title: 'Маржа %',
+      dataIndex: 'margin',
+      key: 'margin',
+      width: '8%',
+      align: 'right',
+      sorter: (a, b) => a.margin - b.margin,
+      render: (v: number) => (
+        <span className="cell-num" style={{ color: v >= 0 ? '#16a34a' : '#dc2626' }}>
+          {v.toFixed(1)}%
+        </span>
+      ),
+    },
+    {
+      title: 'Остаток',
       dataIndex: 'stockSellable',
       key: 'stockSellable',
+      width: '8%',
       align: 'right',
       sorter: (a, b) => a.stockSellable - b.stockSellable,
       render: (v: number) => <span className="cell-num">{fmtNum(v)}</span>,
@@ -116,8 +150,8 @@ function buildFilterSummary(filters: FilterState) {
   if (filters.dateRange) {
     parts.push(`Дата: ${filters.dateRange[0]}..${filters.dateRange[1]}`);
   }
-  if (filters.artikelposition) {
-    parts.push(`SKU: ${filters.artikelposition}`);
+  if (filters.artikelposition.length > 0) {
+    parts.push(`SKU: ${filters.artikelposition.join(', ')}`);
   }
   if (filters.parentSku.length > 0) {
     parts.push(`Parent: ${filters.parentSku.join(', ')}`);
@@ -151,9 +185,8 @@ function hasSaleOnlyFilters(filters: FilterState) {
 }
 
 function matchesProductFilters(sku: string, product: Product | null, filters: FilterState) {
-  if (filters.artikelposition) {
-    const query = filters.artikelposition.toLowerCase();
-    if (!sku.toLowerCase().includes(query)) {
+  if (filters.artikelposition.length > 0) {
+    if (!filters.artikelposition.includes(sku)) {
       return false;
     }
   }

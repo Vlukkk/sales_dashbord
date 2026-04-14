@@ -8,7 +8,7 @@ export interface DashboardFilterParams {
   kundengruppe: string[] | null;
   parentSku: string[] | null;
   lieferant: string[] | null;
-  artikelposition: string | null;
+  artikelposition: string[] | null;
   bestellungNr: string | null;
 }
 
@@ -44,7 +44,7 @@ export function parseFilterParams(request: FastifyRequest): DashboardFilterParam
     kundengruppe: parseArray(readQueryValue(request, 'kundengruppe')),
     parentSku: parseArray(readQueryValue(request, 'parentSku')),
     lieferant: parseArray(readQueryValue(request, 'lieferant')),
-    artikelposition: readQueryValue(request, 'artikelposition') ?? null,
+    artikelposition: parseArray(readQueryValue(request, 'artikelposition')),
     bestellungNr: readQueryValue(request, 'bestellungNr') ?? null,
   };
 }
@@ -132,7 +132,7 @@ export function buildFilterClause(filters: DashboardFilterParams, startIndex = 1
   }
 
   if (filters.artikelposition) {
-    conditions.push(`s.sku_code ILIKE '%' || $${index} || '%'`);
+    conditions.push(`s.sku_code = ANY($${index}::text[])`);
     params.push(filters.artikelposition);
     index += 1;
   }
@@ -155,7 +155,7 @@ export function buildInventoryFilterClause(filters: DashboardFilterParams, start
   let index = startIndex;
 
   if (filters.artikelposition) {
-    conditions.push(`i.sku_code ILIKE '%' || $${index} || '%'`);
+    conditions.push(`i.sku_code = ANY($${index}::text[])`);
     params.push(filters.artikelposition);
     index += 1;
   }

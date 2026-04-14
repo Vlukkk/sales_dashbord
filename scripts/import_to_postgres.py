@@ -27,7 +27,9 @@ try:
         INVENTORY_TXT,
         LIEFERANT_XLSX,
         SALES_XML,
+        discover_binder_xlsx_files,
         discover_sales_xml_files,
+        parse_binder_invoices,
         parse_catalog,
         parse_inventory,
         parse_lieferanten,
@@ -39,7 +41,9 @@ except ModuleNotFoundError:
         INVENTORY_TXT,
         LIEFERANT_XLSX,
         SALES_XML,
+        discover_binder_xlsx_files,
         discover_sales_xml_files,
+        parse_binder_invoices,
         parse_catalog,
         parse_inventory,
         parse_lieferanten,
@@ -85,6 +89,15 @@ def derive_channel(sale: Dict[str, Any]) -> str:
     if "amazon" in group or "amazon." in email:
         return "Amazon"
     return "Direct"
+
+
+def build_binder_business_key(row: Dict[str, Any]) -> str:
+    order_number = str(row.get("order_number") or "").strip()
+    invoice_number = str(row.get("invoice_number") or "").strip()
+    invoice_type = str(row.get("invoice_type") or "").strip()
+    if order_number and invoice_number:
+        return f"{order_number}|{invoice_number}|{invoice_type}"
+    return row_hash(row)
 
 
 def parse_snapshot_date(filename: str) -> str:
@@ -428,6 +441,69 @@ class ImportWriter:
                     updated += 1
         return inserted, updated
 
+    def upsert_binder_invoices(self, rows: list[Dict[str, Any]], run: ImportRun) -> tuple[int, int]:
+        inserted = 0
+        updated = 0
+        with self.conn.cursor() as cur:
+            for row in rows:
+                if not row.get("invoice_type"):
+                    continue
+                bkey = build_binder_business_key(row)
+                result = cur.execute(
+                    """
+                    INSERT INTO binder_invoices (
+                      source_row_hash,
+                      business_key,
+                      kunde,
+                      invoice_type,
+                      invoice_number,
+                      invoice_date,
+                      order_number,
+                      description,
+                      product_codes,
+                      total_amount,
+                      shipping_cost,
+                      raw_record,
+                      import_id
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+                    ON CONFLICT (business_key) DO UPDATE SET
+                      source_row_hash = EXCLUDED.source_row_hash,
+                      kunde = EXCLUDED.kunde,
+                      invoice_type = EXCLUDED.invoice_type,
+                      invoice_number = EXCLUDED.invoice_number,
+                      invoice_date = EXCLUDED.invoice_date,
+                      order_number = EXCLUDED.order_number,
+                      description = EXCLUDED.description,
+                      product_codes = EXCLUDED.product_codes,
+                      total_amount = EXCLUDED.total_amount,
+                      shipping_cost = EXCLUDED.shipping_cost,
+                      raw_record = EXCLUDED.raw_record,
+                      import_id = EXCLUDED.import_id
+                    RETURNING (xmax = 0) AS inserted
+                    """,
+                    (
+                        row_hash(row),
+                        bkey,
+                        row.get("kunde"),
+                        row.get("invoice_type"),
+                        row.get("invoice_number"),
+                        row.get("invoice_date"),
+                        row.get("order_number"),
+                        row.get("description"),
+                        row.get("product_codes"),
+                        row.get("total_amount"),
+                        row.get("shipping_cost"),
+                        json.dumps(row, ensure_ascii=False),
+                        run.id,
+                    ),
+                ).fetchone()
+                if result and result[0]:
+                    inserted += 1
+                else:
+                    updated += 1
+        return inserted, updated
+
     def upsert_inventory(
         self,
         inventory_records: Dict[str, Dict[str, Any]],
@@ -614,6 +690,60 @@ def main() -> None:
                 error_conn.commit()
             raise
 
+    # --- Binder invoices ---
+    binder_sources = discover_binder_xlsx_files()
+    binder_inserted_total = 0
+    binder_updated_total = 0
+    binder_skipped_total = 0
+
+    for binder_path in binder_sources:
+        file_hash = sha256_file(binder_path)
+        with psycopg.connect(database_url) as bconn:
+            bconn.execute("SET TIME ZONE 'UTC'")
+            bwriter = ImportWriter(bconn)
+
+            existing = bwriter.find_completed_import("binder_xlsx", file_hash)
+            if existing is not None:
+                binder_rows = parse_binder_invoices(binder_path)
+                binder_skipped_total += len(binder_rows)
+                print(f"Binder: {binder_path.name} already imported, skipping ({len(binder_rows)} rows)")
+                continue
+
+            binder_rows = parse_binder_invoices(binder_path)
+            binder_import = bwriter.create_import(
+                "binder_xlsx",
+                binder_path.name,
+                file_hash,
+                len(binder_rows),
+            )
+            bconn.commit()
+
+            try:
+                b_inserted, b_updated = bwriter.upsert_binder_invoices(binder_rows, binder_import)
+                bwriter.finish_import(
+                    binder_import,
+                    inserted=b_inserted,
+                    updated=b_updated,
+                    skipped=max(0, len(binder_rows) - b_inserted - b_updated),
+                )
+                bconn.commit()
+                binder_inserted_total += b_inserted
+                binder_updated_total += b_updated
+            except Exception as error:
+                bconn.rollback()
+                with psycopg.connect(database_url) as error_conn:
+                    error_writer = ImportWriter(error_conn)
+                    error_writer.finish_import(
+                        binder_import,
+                        inserted=0,
+                        updated=0,
+                        skipped=0,
+                        status="failed",
+                        error_message=str(error),
+                    )
+                    error_conn.commit()
+                raise
+
     print("PostgreSQL import completed")
     print(f"Sales sources: {len(sales_sources)} files from {SALES_XML.parent}")
     print(f"Catalog source: {CATALOG_XLSX}")
@@ -623,6 +753,8 @@ def main() -> None:
     print(f"Sales rows: {total_sales_rows}")
     print(f"Inventory rows: {len(inventory_records)}")
     print(f"Snapshot date: {snapshot_date}")
+    print(f"Binder sources: {len(binder_sources)} files")
+    print(f"Binder rows: inserted={binder_inserted_total}, updated={binder_updated_total}, skipped={binder_skipped_total}")
 
 
 if __name__ == "__main__":
