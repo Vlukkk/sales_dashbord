@@ -107,8 +107,8 @@ export function useFilters(sales: SaleRecord[], catalog: CatalogData) {
       const [from, to] = filters.dateRange;
       result = result.filter((s) => {
         if (!s.bestelldatum) return false;
-        const d = dayjs(s.bestelldatum);
-        return d.isAfter(dayjs(from).subtract(1, 'day')) && d.isBefore(dayjs(to).add(1, 'day'));
+        const dateKey = s.bestelldatum.slice(0, 10);
+        return dateKey >= from && dateKey <= to;
       });
     }
 

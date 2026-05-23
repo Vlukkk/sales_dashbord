@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import dayjs from 'dayjs';
 import type {
   CatalogData,
   EnrichedSale,
@@ -54,8 +53,8 @@ function matchesFilters(sale: EnrichedSale, filters: FilterState, options: Match
       return false;
     }
 
-    const date = dayjs(sale.bestelldatum);
-    if (!date.isAfter(dayjs(from).subtract(1, 'day')) || !date.isBefore(dayjs(to).add(1, 'day'))) {
+    const dateKey = sale.bestelldatum.slice(0, 10);
+    if (dateKey < from || dateKey > to) {
       return false;
     }
   }

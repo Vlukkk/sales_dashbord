@@ -143,6 +143,7 @@ export default function DashboardSidebar({
           </div>
           <RangePicker
             style={{ width: '100%' }}
+            popupClassName="dashboard-date-range-popup"
             value={filters.dateRange ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])] : null}
             onChange={(dates) => {
               if (dates?.[0] && dates?.[1]) {

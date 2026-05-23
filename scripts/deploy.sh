@@ -5,6 +5,10 @@ APP_DIR="${APP_DIR:-/srv/sales_dashbord}"
 DASHBOARD_DIR="$APP_DIR/dashboard"
 WEB_ROOT="${WEB_ROOT:-/var/www/sales-dashboard}"
 VENV_DIR="$APP_DIR/.venv"
+RAW_DATA_DIR="${RAW_DATA_DIR:-$APP_DIR/raw}"
+SALES_DATA_DIR="${SALES_DATA_DIR:-$RAW_DATA_DIR/sales}"
+MASTER_DATA_DIR="${MASTER_DATA_DIR:-$RAW_DATA_DIR/master}"
+INVENTORY_DATA_DIR="${INVENTORY_DATA_DIR:-$RAW_DATA_DIR/inventory}"
 
 cd "$APP_DIR"
 
@@ -21,6 +25,10 @@ fi
 pip install --quiet --upgrade openpyxl
 
 echo "==> Generate dashboard JSON data"
+RAW_DATA_DIR="$RAW_DATA_DIR" \
+SALES_DATA_DIR="$SALES_DATA_DIR" \
+MASTER_DATA_DIR="$MASTER_DATA_DIR" \
+INVENTORY_DATA_DIR="$INVENTORY_DATA_DIR" \
 python3 scripts/preprocess.py
 
 echo "==> Install frontend dependencies"

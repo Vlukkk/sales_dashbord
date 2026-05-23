@@ -36,6 +36,8 @@ dashboard/public/data/products.json
 dashboard/public/data/inventory.json
 ```
 
+Server-side static generation usually points `preprocess.py` at `/srv/sales_dashbord/raw/...` via env vars, so the generated JSON reflects the same raw files that feed PostgreSQL refresh.
+
 ## Build
 
 ```bash
@@ -72,7 +74,7 @@ Manual fallback:
 cd /srv/sales_dashbord
 git pull --ff-only
 . .venv/bin/activate
-python3 scripts/preprocess.py
+RAW_DATA_DIR=/srv/sales_dashbord/raw SALES_DATA_DIR=/srv/sales_dashbord/raw/sales MASTER_DATA_DIR=/srv/sales_dashbord/raw/master INVENTORY_DATA_DIR=/srv/sales_dashbord/raw/inventory python3 scripts/preprocess.py
 cd dashboard
 npm install
 npm run build

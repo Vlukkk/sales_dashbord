@@ -103,6 +103,19 @@ button { font: inherit; }
   margin-top: 4px;
 }
 
+.dashboard-date-range-popup .ant-picker-panel-container {
+  min-width: 620px;
+}
+
+.dashboard-date-range-popup .ant-picker-panels {
+  display: inline-flex;
+  flex-wrap: nowrap;
+}
+
+.dashboard-date-range-popup .ant-picker-panel {
+  flex: 0 0 auto;
+}
+
 /* Sidebar lieferant panel */
 .sidebar-lieferant-card {
   display: grid;
@@ -513,4 +526,15 @@ button { font: inherit; }
   .chart-card__body--stacked { min-height: 438px; }
   .chart-card__panel--top { flex-basis: 200px; }
   .chart-card__plot { padding: 6px 6px 2px; }
+}
+
+@media (max-width: 720px) {
+  .dashboard-date-range-popup .ant-picker-panel-container {
+    min-width: 0;
+    width: min(calc(100vw - 16px), 620px);
+  }
+
+  .dashboard-date-range-popup .ant-picker-panels {
+    flex-wrap: wrap;
+  }
 }

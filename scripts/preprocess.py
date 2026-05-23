@@ -311,6 +311,54 @@ def parse_sales(source_path: Optional[Path] = None):
     return sales
 
 
+def build_sales_business_key(record: Dict[str, Any]) -> Optional[str]:
+    order_no = str(record.get("bestellungNr") or "").strip()
+    sku_code = str(record.get("artikelposition") or "").strip()
+    if not order_no or not sku_code:
+        return None
+    return f"{order_no}::{sku_code}"
+
+
+def parse_sales_sources(source_paths: Optional[List[Path]] = None) -> List[Dict[str, Any]]:
+    sources = source_paths or discover_sales_xml_files()
+    if not sources:
+        raise FileNotFoundError(
+            f"No sales XML files found in {DATA_DIR} or {BASE_DIR}"
+        )
+
+    if len(sources) == 1:
+        return parse_sales(sources[0])
+
+    merged_by_key: Dict[str, Dict[str, Any]] = {}
+    unkeyed_rows: List[Dict[str, Any]] = []
+    total_rows = 0
+    replaced_rows = 0
+
+    for source in sources:
+        rows = parse_sales(source)
+        total_rows += len(rows)
+
+        for row in rows:
+            business_key = build_sales_business_key(row)
+            if business_key is None:
+                unkeyed_rows.append(row)
+                continue
+
+            if business_key in merged_by_key:
+                replaced_rows += 1
+                del merged_by_key[business_key]
+
+            merged_by_key[business_key] = row
+
+    merged_rows = list(merged_by_key.values()) + unkeyed_rows
+    print(
+        f"Merged sales: {len(merged_rows)} rows from {len(sources)} files "
+        f"({total_rows} raw rows, {replaced_rows} replaced by business key, "
+        f"{len(unkeyed_rows)} without business key)"
+    )
+    return merged_rows
+
+
 def parse_lieferanten() -> Dict[str, str]:
     """Загружает SKU → Lieferant маппинг из отдельного файла."""
     if not LIEFERANT_XLSX.exists():
@@ -617,12 +665,14 @@ def parse_binder_invoices(source_path: Path) -> List[Dict[str, Any]]:
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print(f"Sales source: {SALES_XML}")
+    sales_sources = discover_sales_xml_files()
+    print(f"Sales sources: {len(sales_sources)}")
+    print(f"Latest sales source: {SALES_XML}")
     print(f"Catalog source: {CATALOG_XLSX}")
     print(f"Lieferanten source: {LIEFERANT_XLSX}")
     print(f"Inventory source: {INVENTORY_TXT}")
 
-    sales = parse_sales()
+    sales = parse_sales_sources(sales_sources)
     sales_skus = {r["artikelposition"] for r in sales if r.get("artikelposition")}
     inventory = parse_inventory()
     inventory_skus = set(inventory["records"].keys())
