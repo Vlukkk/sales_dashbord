@@ -1,6 +1,14 @@
+import dayjs from 'dayjs';
 import type { DashboardDailyPoint, EnrichedSale, FilterState } from '../../types';
 import { summarizeSales, type InventorySummary, type MetricSummary, splitSalesCurrentAndPrevious } from '../../utils/analytics';
 import SalesRefundChart from './SalesRefundChart';
+
+const MIN_COMPARE_DAYS = 14;
+
+function computeWindowDays(dateRange: FilterState['dateRange']): number | null {
+  if (!dateRange) return null;
+  return dayjs(dateRange[1]).diff(dayjs(dateRange[0]), 'day') + 1;
+}
 
 interface LegacyProps {
   mode?: 'legacy';
@@ -35,34 +43,37 @@ const fmtNum = (v: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDi
 const fmtMoney = (v: number) =>
   new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 
-function computeRelativeDelta(current: number, previous: number) {
-  if (previous <= 0) {
-    return null;
-  }
-
-  return ((current - previous) / previous) * 100;
+interface DeltaBadgeProps {
+  current: number;
+  previous: number | null;
+  mode?: 'relative' | 'points';
+  inverted?: boolean;
+  windowDays?: number | null;
 }
 
-function DeltaBadge({
-  value,
-  inverted = false,
-  suffix = '%',
-}: {
-  value: number | null;
-  inverted?: boolean;
-  suffix?: string;
-}) {
-  if (value === null || !isFinite(value)) {
+function DeltaBadge({ current, previous, mode = 'relative', inverted = false, windowDays }: DeltaBadgeProps) {
+  if (typeof windowDays === 'number' && windowDays < MIN_COMPARE_DAYS) {
     return null;
   }
 
-  const rounded = Math.round(value * 10) / 10;
+  if (previous === null || previous === 0) {
+    return <span className="bento__delta">база периода н/д</span>;
+  }
+
+  const delta = mode === 'points' ? current - previous : ((current - previous) / previous) * 100;
+
+  if (!isFinite(delta)) {
+    return <span className="bento__delta">база периода н/д</span>;
+  }
+
+  const rounded = Math.round(delta * 10) / 10;
   const positive = rounded > 0;
   const negative = rounded < 0;
   const good = inverted ? negative : positive;
   const bad = inverted ? positive : negative;
   const cls = good ? 'bento__delta bento__delta--up' : bad ? 'bento__delta bento__delta--down' : 'bento__delta';
   const arrow = positive ? '↑' : negative ? '↓' : '·';
+  const suffix = mode === 'points' ? ' п.п.' : '%';
 
   return (
     <span className={cls}>
@@ -73,21 +84,6 @@ function DeltaBadge({
 
 export default function Overview(props: Props) {
   if (props.mode === 'api') {
-    const previousSummary = props.previousSummary ?? {
-      ...props.summary,
-      orders: 0,
-      units: 0,
-      refundedUnits: 0,
-      revenue: 0,
-      refunds: 0,
-      profit: 0,
-      refundOrders: 0,
-      margin: 0,
-      avgOrder: 0,
-      refundRate: 0,
-      activeSkus: 0,
-      rows: 0,
-    };
     const refundRate = props.summary.units > 0 ? (props.summary.refundedUnits / props.summary.units) * 100 : 0;
     const showSelectionHeadline = props.filters.parentSku.length > 0 || props.filters.artikelposition.length > 0;
     const selectionStats = {
@@ -95,6 +91,7 @@ export default function Overview(props: Props) {
       refunds: props.summary.refundedUnits,
       revenue: props.summary.revenue,
     };
+    const windowDays = computeWindowDays(props.filters.dateRange);
 
     return (
       <>
@@ -102,27 +99,29 @@ export default function Overview(props: Props) {
           <div className="bento__item">
             <span className="bento__label">Заказы</span>
             <span className="bento__value">{fmtNum(props.summary.orders)}</span>
-            <DeltaBadge value={computeRelativeDelta(props.summary.orders, previousSummary.orders)} />
+            <DeltaBadge current={props.summary.orders} previous={props.previousSummary?.orders ?? null} windowDays={windowDays} />
           </div>
           <div className="bento__item">
             <span className="bento__label">Продано, шт</span>
             <span className="bento__value">{fmtNum(props.summary.units)}</span>
-            <DeltaBadge value={computeRelativeDelta(props.summary.units, previousSummary.units)} />
+            <DeltaBadge current={props.summary.units} previous={props.previousSummary?.units ?? null} windowDays={windowDays} />
           </div>
           <div className="bento__item">
             <span className="bento__label">Возвраты, шт</span>
             <span className="bento__value">{fmtNum(props.summary.refundedUnits)}</span>
             <span className="bento__note">{refundRate.toFixed(1)}% от продаж</span>
             <DeltaBadge
-              value={props.previousSummary ? refundRate - previousSummary.refundRate : null}
+              current={refundRate}
+              previous={props.previousSummary?.refundRate ?? null}
+              mode="points"
               inverted
-              suffix=" п.п."
+              windowDays={windowDays}
             />
           </div>
           <div className="bento__item">
             <span className="bento__label">Сумма продаж</span>
             <span className="bento__value">{fmtMoney(props.summary.revenue)}</span>
-            <DeltaBadge value={computeRelativeDelta(props.summary.revenue, previousSummary.revenue)} />
+            <DeltaBadge current={props.summary.revenue} previous={props.previousSummary?.revenue ?? null} windowDays={windowDays} />
           </div>
           <div className="bento__item">
             <span className="bento__label">FBA в продаже</span>
@@ -201,6 +200,8 @@ export default function Overview(props: Props) {
   })();
 
   const refundRate = props.summary.units > 0 ? (props.summary.refundedUnits / props.summary.units) * 100 : 0;
+  const windowDays = computeWindowDays(props.filters.dateRange);
+  const hasPrev = periodComparison.previous.length > 0;
 
   return (
     <>
@@ -208,27 +209,29 @@ export default function Overview(props: Props) {
         <div className="bento__item">
           <span className="bento__label">Заказы</span>
           <span className="bento__value">{fmtNum(props.summary.orders)}</span>
-          <DeltaBadge value={computeRelativeDelta(props.summary.orders, previousSummary.orders)} />
+          <DeltaBadge current={props.summary.orders} previous={hasPrev ? previousSummary.orders : null} windowDays={windowDays} />
         </div>
         <div className="bento__item">
           <span className="bento__label">Продано, шт</span>
           <span className="bento__value">{fmtNum(props.summary.units)}</span>
-          <DeltaBadge value={computeRelativeDelta(props.summary.units, previousSummary.units)} />
+          <DeltaBadge current={props.summary.units} previous={hasPrev ? previousSummary.units : null} windowDays={windowDays} />
         </div>
         <div className="bento__item">
           <span className="bento__label">Возвраты, шт</span>
           <span className="bento__value">{fmtNum(props.summary.refundedUnits)}</span>
           <span className="bento__note">{refundRate.toFixed(1)}% от продаж</span>
           <DeltaBadge
-            value={periodComparison.previous.length > 0 ? refundRate - previousSummary.refundRate : null}
+            current={refundRate}
+            previous={hasPrev ? previousSummary.refundRate : null}
+            mode="points"
             inverted
-            suffix=" п.п."
+            windowDays={windowDays}
           />
         </div>
         <div className="bento__item">
           <span className="bento__label">Сумма продаж</span>
           <span className="bento__value">{fmtMoney(props.summary.revenue)}</span>
-          <DeltaBadge value={computeRelativeDelta(props.summary.revenue, previousSummary.revenue)} />
+          <DeltaBadge current={props.summary.revenue} previous={hasPrev ? previousSummary.revenue : null} windowDays={windowDays} />
         </div>
         <div className="bento__item">
           <span className="bento__label">FBA в продаже</span>

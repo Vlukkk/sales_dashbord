@@ -27,7 +27,8 @@ type DailyPoint = DashboardDailyPoint;
 interface Kpi {
   label: string;
   value: string;
-  delta: number | null;
+  current: number;
+  previous: number | null;
   deltaInverted?: boolean;
   deltaMode?: 'relative' | 'points';
   alert?: boolean;
@@ -45,6 +46,7 @@ const COLOR_REVENUE = '#4f46e5';
 const COLOR_SALES_BAR = '#a5b4fc';
 const COLOR_REFUNDS = '#e11d48';
 const REFUND_RATE_ALERT = 10;
+const MIN_COMPARE_DAYS = 14;
 
 function buildDaily(sales: EnrichedSale[]): DailyPoint[] {
   const map = new Map<
@@ -170,14 +172,6 @@ function formatDateLong(value: string) {
   return dayjs(value).format('DD MMMM');
 }
 
-function computeRelativeDelta(current: number, previous: number) {
-  if (previous <= 0) {
-    return null;
-  }
-
-  return ((current - previous) / previous) * 100;
-}
-
 function niceMax(value: number, steps = 4) {
   if (value <= 0) {
     return 1;
@@ -251,20 +245,30 @@ function areaPath(
   return `${line} L${lastX},${baseline} L${firstX},${baseline} Z`;
 }
 
-function Delta({
-  value,
-  inverted = false,
-  mode = 'relative',
-}: {
-  value: number | null;
-  inverted?: boolean;
+interface DeltaProps {
+  current: number;
+  previous: number | null;
   mode?: 'relative' | 'points';
-}) {
-  if (value === null || !isFinite(value)) {
+  inverted?: boolean;
+  windowDays?: number | null;
+}
+
+function Delta({ current, previous, mode = 'relative', inverted = false, windowDays }: DeltaProps) {
+  if (typeof windowDays === 'number' && windowDays < MIN_COMPARE_DAYS) {
     return null;
   }
 
-  const rounded = Math.round(value * 10) / 10;
+  if (previous === null || previous === 0) {
+    return <span className="chart-kpi__delta">база периода н/д</span>;
+  }
+
+  const delta = mode === 'points' ? current - previous : ((current - previous) / previous) * 100;
+
+  if (!isFinite(delta)) {
+    return <span className="chart-kpi__delta">база периода н/д</span>;
+  }
+
+  const rounded = Math.round(delta * 10) / 10;
   const up = rounded > 0;
   const down = rounded < 0;
   const positive = inverted ? down : up;
@@ -284,7 +288,7 @@ function Delta({
   );
 }
 
-function KpiRow({ items }: { items: Kpi[] }) {
+function KpiRow({ items, windowDays }: { items: Kpi[]; windowDays: number | null }) {
   return (
     <div className="chart-card__kpis">
       {items.map((item) => (
@@ -293,7 +297,13 @@ function KpiRow({ items }: { items: Kpi[] }) {
           <div className={`chart-kpi__value${item.alert ? ' chart-kpi__value--alert' : ''}`}>
             {item.value}
           </div>
-          <Delta value={item.delta} inverted={item.deltaInverted} mode={item.deltaMode} />
+          <Delta
+            current={item.current}
+            previous={item.previous}
+            inverted={item.deltaInverted}
+            mode={item.deltaMode}
+            windowDays={windowDays}
+          />
         </div>
       ))}
     </div>
@@ -635,6 +645,7 @@ export default function SalesRefundChart(props: Props) {
 
   const { daily, summaryCurrent, summaryPrevious, hasPrevious, from, to, rowCount } = normalized;
   const totalUnits = summaryCurrent.units + summaryCurrent.refundedUnits;
+  const windowDays = from && to ? Math.max(1, dayjs(to).diff(dayjs(from), 'day') + 1) : null;
   const handleRevenueHover: HoverHandler = (point, event) => {
     if (!point || !event) {
       setHoveredRevenuePoint(null);
@@ -656,22 +667,26 @@ export default function SalesRefundChart(props: Props) {
     {
       label: 'Выручка',
       value: formatMoneyCompact(summaryCurrent.revenue),
-      delta: computeRelativeDelta(summaryCurrent.revenue, summaryPrevious.revenue),
+      current: summaryCurrent.revenue,
+      previous: hasPrevious ? summaryPrevious.revenue : null,
     },
     {
       label: 'Продано, шт',
       value: formatNumber(summaryCurrent.units),
-      delta: computeRelativeDelta(summaryCurrent.units, summaryPrevious.units),
+      current: summaryCurrent.units,
+      previous: hasPrevious ? summaryPrevious.units : null,
     },
     {
       label: 'Средний чек',
       value: formatMoneyCompact(summaryCurrent.avgOrder),
-      delta: computeRelativeDelta(summaryCurrent.avgOrder, summaryPrevious.avgOrder),
+      current: summaryCurrent.avgOrder,
+      previous: hasPrevious ? summaryPrevious.avgOrder : null,
     },
     {
       label: 'Возвраты',
       value: `${summaryCurrent.refundRate.toFixed(1)}%`,
-      delta: hasPrevious ? summaryCurrent.refundRate - summaryPrevious.refundRate : null,
+      current: summaryCurrent.refundRate,
+      previous: hasPrevious ? summaryPrevious.refundRate : null,
       deltaMode: 'points',
       deltaInverted: true,
       alert: summaryCurrent.refundRate > REFUND_RATE_ALERT,
@@ -702,7 +717,7 @@ export default function SalesRefundChart(props: Props) {
         </div>
       ) : (
         <>
-          <KpiRow items={kpis} />
+          <KpiRow items={kpis} windowDays={windowDays} />
           <div className="chart-card__body chart-card__body--stacked">
             <div className="chart-card__panel chart-card__panel--top">
               <PanelHeader
