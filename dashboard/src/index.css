@@ -1,15 +1,15 @@
 :root {
-  --bg: #f5f7fb;
+  --bg: #f4f7fc;
   --line: rgba(15, 23, 42, 0.08);
   --line-soft: rgba(15, 23, 42, 0.04);
   --text: #0f172a;
   --muted: #64748b;
-  --accent: #2563eb;
-  --mint: #10b981;
-  --amber: #f59e0b;
-  --rose: #ef4444;
+  --accent: #4f46e5;
+  --mint: #059669;
+  --amber: #d97706;
+  --rose: #e11d48;
   --card: #ffffff;
-  --shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  --shadow: 0 4px 20px rgba(15, 23, 42, 0.07);
 }
 
 * { box-sizing: border-box; }
@@ -146,16 +146,16 @@ button { font: inherit; }
 
 .sidebar-lieferant-row:hover {
   background: #ffffff;
-  border-color: rgba(37, 99, 235, 0.18);
+  border-color: rgba(79, 70, 229, 0.18);
 }
 
 .sidebar-lieferant-row--active {
-  background: rgba(37, 99, 235, 0.08);
-  border-color: rgba(37, 99, 235, 0.24);
+  background: rgba(79, 70, 229, 0.08);
+  border-color: rgba(79, 70, 229, 0.24);
 }
 
 .sidebar-lieferant-row:focus-visible {
-  outline: 2px solid rgba(37, 99, 235, 0.28);
+  outline: 2px solid rgba(79, 70, 229, 0.28);
   outline-offset: 1px;
 }
 
@@ -305,7 +305,7 @@ button { font: inherit; }
 .bento__note { color: var(--muted); font-size: 11px; }
 .bento__delta { font-size: 11px; font-weight: 600; color: #94a3b8; }
 .bento__delta--up { color: #059669; }
-.bento__delta--down { color: #dc2626; }
+.bento__delta--down { color: #e11d48; }
 
 /* Selection headline */
 .selection-headline {
@@ -315,7 +315,7 @@ button { font: inherit; }
   padding: 20px 22px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.06), rgba(16, 185, 129, 0.04));
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.06), rgba(5, 150, 105, 0.04));
   box-shadow: var(--shadow);
 }
 
@@ -357,10 +357,10 @@ button { font: inherit; }
 .chart-kpi { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .chart-kpi__label { color: #94a3b8; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
 .chart-kpi__value { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.15; }
-.chart-kpi__value--alert { color: #f43f5e; }
+.chart-kpi__value--alert { color: #e11d48; }
 .chart-kpi__delta { font-size: 11px; font-weight: 600; color: #94a3b8; }
-.chart-kpi__delta--up { color: #10b981; }
-.chart-kpi__delta--down { color: #f43f5e; }
+.chart-kpi__delta--up { color: #059669; }
+.chart-kpi__delta--down { color: #e11d48; }
 
 .chart-card__body { height: 330px; }
 .chart-card__body--stacked {

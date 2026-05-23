@@ -217,7 +217,7 @@ export default function FbmMargin({ filters }: Props) {
       width: 110,
       align: 'right',
       render: (value: number, row) => (
-        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#16a34a' : '#111827', fontWeight: 600 }}>
+        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#059669' : '#111827', fontWeight: 600 }}>
           {row.hasBinderMatch ? fmtMoney(value) : '-'}
         </span>
       ),
@@ -230,7 +230,7 @@ export default function FbmMargin({ filters }: Props) {
       width: 85,
       align: 'right',
       render: (value: number, row) => (
-        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#16a34a' : '#111827' }}>
+        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#059669' : '#111827' }}>
           {row.hasBinderMatch ? fmtPct(value) : '-'}
         </span>
       ),
@@ -306,7 +306,7 @@ export default function FbmMargin({ filters }: Props) {
       width: 110,
       align: 'right',
       render: (value: number, row) => (
-        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#16a34a' : '#111827', fontWeight: 600 }}>
+        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#059669' : '#111827', fontWeight: 600 }}>
           {row.hasBinderMatch ? fmtMoney(value) : '-'}
         </span>
       ),
@@ -377,7 +377,7 @@ export default function FbmMargin({ filters }: Props) {
     {
       label: 'Маржа',
       value: fmtMoney(summary.totalMargin),
-      color: summary.totalMargin >= 0 ? '#16a34a' : '#dc2626',
+      color: summary.totalMargin >= 0 ? '#059669' : '#e11d48',
     },
   ];
 

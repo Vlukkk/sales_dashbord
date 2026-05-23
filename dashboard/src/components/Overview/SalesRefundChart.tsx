@@ -41,8 +41,8 @@ interface HoverState {
 
 type HoverHandler = (point: DailyPoint | null, event?: ReactMouseEvent<SVGRectElement>) => void;
 
-const COLOR_REVENUE = '#2563eb';
-const COLOR_SALES_BAR = COLOR_REVENUE;
+const COLOR_REVENUE = '#4f46e5';
+const COLOR_SALES_BAR = '#a5b4fc';
 const COLOR_REFUNDS = '#e11d48';
 const REFUND_RATE_ALERT = 10;
 
@@ -551,7 +551,7 @@ function UnitsRefundRateChart({
               height={barHeight}
               rx={5}
               fill={COLOR_SALES_BAR}
-              opacity="0.82"
+              opacity="0.9"
             />
 
             {salesLabels.has(index) && point.sales > 0 && (

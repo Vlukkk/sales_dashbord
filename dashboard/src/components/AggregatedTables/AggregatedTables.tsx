@@ -44,6 +44,18 @@ const fmtNum = (v: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDi
 const fmtMoney = (v: number) =>
   new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(v);
 
+function ragReturnRate(v: number): string {
+  if (v >= 30) return '#e11d48';
+  if (v >= 15) return '#d97706';
+  return '#059669';
+}
+
+function ragMarginPct(v: number): string {
+  if (v < 15) return '#e11d48';
+  if (v < 25) return '#d97706';
+  return '#059669';
+}
+
 const EXPORT_COLUMNS: ExportColumn<ScopeRow>[] = [
   { key: 'label', header: 'Позиция', type: 'string', width: 140, value: (row) => row.label },
   { key: 'lieferant', header: 'Поставщик', type: 'string', width: 110, value: (row) => row.lieferant ?? 'Без поставщика' },
@@ -94,7 +106,9 @@ function makeColumns(labelTitle: string): ColumnsType<ScopeRow> {
       align: 'right',
       sorter: (a, b) => a.refundRate - b.refundRate,
       render: (v: number) => (
-        <span className={'cell-num' + (v >= 10 ? ' cell-warn' : '')}>{v.toFixed(1)}%</span>
+        <span className="cell-num" style={{ color: ragReturnRate(v), fontWeight: v >= 15 ? 600 : undefined }}>
+          {v.toFixed(1)}%
+        </span>
       ),
     },
     {
@@ -114,7 +128,7 @@ function makeColumns(labelTitle: string): ColumnsType<ScopeRow> {
       align: 'right',
       sorter: (a, b) => a.profit - b.profit,
       render: (v: number) => (
-        <span className="cell-num" style={{ color: v >= 0 ? '#16a34a' : '#dc2626' }}>
+        <span className="cell-num" style={{ color: v >= 0 ? '#059669' : '#e11d48' }}>
           {fmtMoney(v)}
         </span>
       ),
@@ -127,7 +141,7 @@ function makeColumns(labelTitle: string): ColumnsType<ScopeRow> {
       align: 'right',
       sorter: (a, b) => a.margin - b.margin,
       render: (v: number) => (
-        <span className="cell-num" style={{ color: v >= 0 ? '#16a34a' : '#dc2626' }}>
+        <span className="cell-num" style={{ color: ragMarginPct(v) }}>
           {v.toFixed(1)}%
         </span>
       ),

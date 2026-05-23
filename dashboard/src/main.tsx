@@ -12,12 +12,12 @@ createRoot(document.getElementById('root')!).render(
       locale={ruRU}
       theme={{
         token: {
-          colorPrimary: '#2563eb',
-          colorInfo: '#2563eb',
-          colorSuccess: '#10b981',
-          colorWarning: '#f59e0b',
-          colorError: '#ef4444',
-          colorBgBase: '#f5f7fb',
+          colorPrimary: '#4f46e5',
+          colorInfo: '#4f46e5',
+          colorSuccess: '#059669',
+          colorWarning: '#d97706',
+          colorError: '#e11d48',
+          colorBgBase: '#f4f7fc',
           colorTextBase: '#0f172a',
           colorBgContainer: '#ffffff',
           borderRadius: 10,
@@ -28,7 +28,7 @@ createRoot(document.getElementById('root')!).render(
           Table: {
             headerBg: '#f8fafc',
             headerColor: '#64748b',
-            rowHoverBg: 'rgba(37, 99, 235, 0.04)',
+            rowHoverBg: 'rgba(79, 70, 229, 0.04)',
           },
         },
       }}
