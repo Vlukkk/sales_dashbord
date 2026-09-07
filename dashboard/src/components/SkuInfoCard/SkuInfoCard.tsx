@@ -18,18 +18,15 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales = [], onClo
     product: CatalogData['products'][string] | null;
     inventory: InventoryData['records'][string] | null;
     siblings: Array<{ sku: string; name: string | null; length: string | null }>;
-    loading: boolean;
   }>({
     product: null,
     inventory: null,
     siblings: [],
-    loading: false,
   });
   const [remoteSummary, setRemoteSummary] = useState({
     count: 0,
     totalInclTax: 0,
     totalProfit: 0,
-    loading: false,
   });
   const hasLocalSales = sales.length > 0;
   const hasLocalInventory = Boolean(sku && inventory.records[sku]);
@@ -55,14 +52,10 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales = [], onClo
 
   useEffect(() => {
     if ((hasLocalSales && hasLocalInventory) || !sku) {
-      setRemoteSummary({ count: 0, totalInclTax: 0, totalProfit: 0, loading: false });
-      setRemoteDetail({ product: null, inventory: null, siblings: [], loading: false });
       return;
     }
 
     const controller = new AbortController();
-    setRemoteSummary((prev) => ({ ...prev, loading: true }));
-    setRemoteDetail((prev) => ({ ...prev, loading: true }));
 
     fetch(`${API_BASE}/api/dashboard/sku-detail?sku=${encodeURIComponent(sku)}`, { signal: controller.signal })
       .then(async (response) => {
@@ -78,13 +71,11 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales = [], onClo
           count: Number(summary.rows) || 0,
           totalInclTax: Number(summary.revenue) || 0,
           totalProfit: Number(summary.profit) || 0,
-          loading: false,
         });
         setRemoteDetail({
           product: payload.product ?? null,
           inventory: payload.inventory ?? null,
           siblings: payload.siblings ?? [],
-          loading: false,
         });
       })
       .catch((error) => {
@@ -93,8 +84,8 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales = [], onClo
         }
 
         console.error('Failed to load SKU detail:', error);
-        setRemoteSummary({ count: 0, totalInclTax: 0, totalProfit: 0, loading: false });
-        setRemoteDetail({ product: null, inventory: null, siblings: [], loading: false });
+        setRemoteSummary({ count: 0, totalInclTax: 0, totalProfit: 0 });
+        setRemoteDetail({ product: null, inventory: null, siblings: [] });
       });
 
     return () => {
@@ -120,7 +111,7 @@ export default function SkuInfoCard({ sku, catalog, inventory, sales = [], onClo
       title={sku || ''}
       open={!!sku}
       onClose={onClose}
-      width={500}
+      styles={{ wrapper: { width: 500, maxWidth: '100vw' } }}
       className="sku-drawer"
     >
       {!product ? (

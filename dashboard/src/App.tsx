@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Spin, Tabs, Typography } from 'antd';
+import { Spin, Typography } from 'antd';
+import DashboardTabs from './components/DashboardTabs/DashboardTabs';
 import DashboardSidebar from './components/DashboardSidebar/DashboardSidebar';
 import Overview from './components/Overview/Overview';
 import AggregatedTables from './components/AggregatedTables/AggregatedTables';
@@ -53,7 +54,7 @@ function StaticDashboardApp() {
       />
 
       <main className="dashboard-main">
-        <Tabs
+        <DashboardTabs
           activeKey={activeTab}
           onChange={setActiveTab}
           items={[
@@ -70,6 +71,7 @@ function StaticDashboardApp() {
                     filters={filters}
                   />
                   <AggregatedTables
+                    selectedSku={selectedSku}
                     visibleSales={analytics.visibleSales}
                     inventory={inventory}
                     catalog={catalog}
@@ -135,7 +137,7 @@ function ApiDashboardApp() {
       />
 
       <main className="dashboard-main">
-        <Tabs
+        <DashboardTabs
           activeKey={activeTab}
           onChange={setActiveTab}
           items={[
@@ -154,6 +156,7 @@ function ApiDashboardApp() {
                     retailSeries={dashboard.retailSeries}
                   />
                   <AggregatedTables
+                    selectedSku={selectedSku}
                     inventory={inventory}
                     catalog={catalog}
                     filters={filters}

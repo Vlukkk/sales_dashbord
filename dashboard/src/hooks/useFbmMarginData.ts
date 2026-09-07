@@ -98,7 +98,7 @@ export function useFbmMarginData(params: FbmMarginParams) {
     return () => {
       abortRef.current?.abort();
     };
-  }, [fetchData, params.filters, params.page, params.pageSize, params.sortBy, params.sortDir, params.includeDetails]);
+  }, [fetchData, params]);
 
-  return state;
+  return { ...state, reload: () => fetchData(params) };
 }

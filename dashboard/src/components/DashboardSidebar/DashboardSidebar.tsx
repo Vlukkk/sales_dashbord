@@ -60,6 +60,7 @@ export default function DashboardSidebar({
     const values = sales.map((sale) => deriveChannel(sale));
     return [...new Set(values)].sort();
   }, [filterOptions?.channels, sales]);
+  const maxFilterDate = filterOptions?.maxDate;
   const quickYears = useMemo(() => {
     const years = sales.length > 0
       ? sales
@@ -67,12 +68,12 @@ export default function DashboardSidebar({
         .filter(Boolean)
         .map((value) => Number(value))
         .filter((value) => Number.isFinite(value))
-      : filterOptions?.maxDate
-        ? [Number(filterOptions.maxDate.slice(0, 4))]
+      : maxFilterDate
+        ? [Number(maxFilterDate.slice(0, 4))]
         : [];
     const anchorYear = years.length > 0 ? Math.max(...years) : dayjs().year();
     return [anchorYear - 2, anchorYear - 1, anchorYear];
-  }, [filterOptions?.maxDate, sales]);
+  }, [maxFilterDate, sales]);
   const [skuSearch, setSkuSearch] = useState('');
   const matchedSkus = useMemo(() => {
     const query = skuSearch.trim().toLowerCase();
@@ -123,7 +124,7 @@ export default function DashboardSidebar({
       <div>
         <div className="sidebar-section-title">Фильтры</div>
 
-        <div className="sidebar-field">
+        <div className="sidebar-field" data-active={Boolean(filters.dateRange)}>
           <div className="sidebar-label">Дата</div>
           <div className="sidebar-year-shortcuts" role="group" aria-label="Быстрый выбор года">
             {quickYears.map((year) => (
@@ -143,7 +144,7 @@ export default function DashboardSidebar({
           </div>
           <RangePicker
             style={{ width: '100%' }}
-            popupClassName="dashboard-date-range-popup"
+            classNames={{ popup: { root: 'dashboard-date-range-popup' } }}
             value={filters.dateRange ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])] : null}
             onChange={(dates) => {
               if (dates?.[0] && dates?.[1]) {
@@ -155,7 +156,7 @@ export default function DashboardSidebar({
           />
         </div>
 
-        <div className="sidebar-field">
+        <div className="sidebar-field" data-active={filters.artikelposition.length > 0}>
           <div className="sidebar-label">SKU</div>
           <Select
             mode="multiple"
@@ -182,7 +183,7 @@ export default function DashboardSidebar({
           </Button>
         </div>
 
-        <div className="sidebar-field">
+        <div className="sidebar-field" data-active={filters.parentSku.length > 0}>
           <div className="sidebar-label">Parent</div>
           <Select
             mode="multiple"
@@ -200,7 +201,7 @@ export default function DashboardSidebar({
           />
         </div>
 
-        <div className="sidebar-field">
+        <div className="sidebar-field" data-active={filters.lieferant.length > 0}>
           <div className="sidebar-label">Поставщик</div>
           <Select
             mode="multiple"
@@ -224,7 +225,7 @@ export default function DashboardSidebar({
             label: 'Доп. фильтры',
             children: (
               <>
-                <div className="sidebar-field">
+                <div className="sidebar-field" data-active={filters.status.length > 0}>
                   <div className="sidebar-label">Статус</div>
                   <Select
                     mode="multiple"
@@ -236,7 +237,7 @@ export default function DashboardSidebar({
                     style={{ width: '100%' }}
                   />
                 </div>
-                <div className="sidebar-field">
+                <div className="sidebar-field" data-active={filters.channel.length > 0}>
                   <div className="sidebar-label">Канал продаж</div>
                   <Select
                     mode="multiple"
@@ -248,7 +249,7 @@ export default function DashboardSidebar({
                     style={{ width: '100%' }}
                   />
                 </div>
-                <div className="sidebar-field">
+                <div className="sidebar-field" data-active={filters.kundengruppe.length > 0}>
                   <div className="sidebar-label">Группа клиентов</div>
                   <Select
                     mode="multiple"

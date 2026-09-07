@@ -12,23 +12,23 @@ createRoot(document.getElementById('root')!).render(
       locale={ruRU}
       theme={{
         token: {
-          colorPrimary: '#4f46e5',
-          colorInfo: '#4f46e5',
+          colorPrimary: '#2563eb',
+          colorInfo: '#2563eb',
           colorSuccess: '#059669',
           colorWarning: '#d97706',
           colorError: '#e11d48',
-          colorBgBase: '#f4f7fc',
+          colorBgBase: '#f5f6f8',
           colorTextBase: '#0f172a',
           colorBgContainer: '#ffffff',
-          borderRadius: 10,
-          fontFamily: "'Outfit', 'Segoe UI', sans-serif",
+          borderRadius: 6,
+          fontFamily: "'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif",
           controlHeight: 38,
         },
         components: {
           Table: {
-            headerBg: '#f8fafc',
-            headerColor: '#64748b',
-            rowHoverBg: 'rgba(79, 70, 229, 0.04)',
+            headerBg: '#f3f5f8',
+            headerColor: '#475569',
+            rowHoverBg: '#eff6ff',
           },
         },
       }}

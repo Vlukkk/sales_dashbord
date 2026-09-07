@@ -16,6 +16,7 @@ interface Props {
   skuRows?: ScopeRow[];
   parentRows?: ScopeRow[];
   enabled?: boolean;
+  selectedSku?: string | null;
   onSelectSku: (sku: string) => void;
 }
 
@@ -26,6 +27,7 @@ interface TableState {
   total: number;
   page: number;
   pageSize: number;
+  filterKey: string;
   loading: boolean;
 }
 
@@ -37,6 +39,7 @@ const INITIAL_TABLE_STATE: TableState = {
   total: 0,
   page: 1,
   pageSize: 10,
+  filterKey: '',
   loading: true,
 };
 
@@ -390,6 +393,7 @@ export default function AggregatedTables({
   skuRows,
   parentRows,
   enabled = true,
+  selectedSku,
   onSelectSku,
 }: Props) {
   const isApiMode = import.meta.env.VITE_DATA_SOURCE === 'api';
@@ -473,16 +477,18 @@ export default function AggregatedTables({
     groupBy: ScopeGroupBy,
     page: number,
     pageSize: number,
+    requestFilterKey: string,
     setter: TableSetter,
   ) => {
     try {
-      setter((prev) => ({ ...prev, loading: true }));
+      setter((prev) => ({ ...prev, page, pageSize, filterKey: requestFilterKey, loading: true }));
       const payload = await fetchScopeRows(filters, groupBy, page, pageSize);
       setter({
         rows: payload.rows,
         total: payload.total,
         page,
         pageSize,
+        filterKey: requestFilterKey,
         loading: false,
       });
     } catch (error) {
@@ -491,30 +497,24 @@ export default function AggregatedTables({
     }
   }, [filters]);
 
-  useEffect(() => {
-    if (!isApiMode || !enabled) {
-      return;
-    }
-
-    setSkuTable((prev) => ({ ...prev, page: 1 }));
-    setParentTable((prev) => ({ ...prev, page: 1 }));
-  }, [enabled, filterKey, isApiMode]);
+  const currentSkuPage = skuTable.filterKey === filterKey ? skuTable.page : 1;
+  const currentParentPage = parentTable.filterKey === filterKey ? parentTable.page : 1;
 
   useEffect(() => {
     if (!isApiMode || !enabled) {
       return;
     }
 
-    void loadTable('artikelposition', skuTable.page, skuTable.pageSize, setSkuTable);
-  }, [enabled, isApiMode, loadTable, skuTable.page, skuTable.pageSize, filterKey]);
+    void loadTable('artikelposition', currentSkuPage, skuTable.pageSize, filterKey, setSkuTable);
+  }, [enabled, isApiMode, loadTable, currentSkuPage, skuTable.pageSize, filterKey]);
 
   useEffect(() => {
     if (!isApiMode || !enabled) {
       return;
     }
 
-    void loadTable('parentSku', parentTable.page, parentTable.pageSize, setParentTable);
-  }, [enabled, isApiMode, loadTable, parentTable.page, parentTable.pageSize, filterKey]);
+    void loadTable('parentSku', currentParentPage, parentTable.pageSize, filterKey, setParentTable);
+  }, [enabled, isApiMode, loadTable, currentParentPage, parentTable.pageSize, filterKey]);
 
   const exportTable = async (format: 'excel' | 'csv', labelTitle: string, rows: ScopeRow[], groupBy?: ScopeGroupBy) => {
     const filenameBase = `${labelTitle.toLowerCase()}-${dayjs().format('YYYY-MM-DD_HH-mm')}`;
@@ -557,7 +557,6 @@ export default function AggregatedTables({
         <div className="card__header">
           <h3>SKU</h3>
           <Space size={8} wrap>
-            <span className="card__meta">Клик по строке — карточка SKU</span>
             <Button
               size="small"
               icon={<FileExcelOutlined />}
@@ -582,7 +581,7 @@ export default function AggregatedTables({
           loading={isApiMode ? (!enabled || skuTable.loading) : undefined}
           pagination={isApiMode
             ? {
-              current: skuTable.page,
+              current: currentSkuPage,
               pageSize: skuTable.pageSize,
               total: skuTable.total,
               showSizeChanger: false,
@@ -591,11 +590,28 @@ export default function AggregatedTables({
                 ...prev,
                 page,
                 pageSize: pageSize ?? prev.pageSize,
+                filterKey,
               })),
             }
             : { pageSize: 10, showSizeChanger: false, showTotal: (t) => `${t} строк` }}
-          rowClassName={(r) => (r.stockSellable > 0 && r.units === 0 ? 'row--stale-stock' : '')}
-          onRow={(r) => ({ onClick: () => onSelectSku(r.key), style: { cursor: 'pointer' } })}
+          scroll={{ x: 900 }}
+          rowClassName={(r) => [
+            r.stockSellable > 0 && r.units === 0 ? 'row--stale-stock' : '',
+            selectedSku === r.key ? 'row--selected' : '',
+          ].join(' ')}
+          onRow={(r) => ({
+            onClick: () => onSelectSku(r.key),
+            onKeyDown: (event) => {
+              if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                event.preventDefault();
+                onSelectSku(r.key);
+              }
+            },
+            tabIndex: 0,
+            'aria-label': `SKU ${r.key}`,
+            'aria-selected': selectedSku === r.key,
+            style: { cursor: 'pointer' },
+          })}
           size="middle"
         />
       </div>
@@ -625,11 +641,12 @@ export default function AggregatedTables({
           className="agg-table"
           rowKey="key"
           dataSource={displayedParentRows}
+          scroll={{ x: 900 }}
           columns={makeColumns('Parent')}
           loading={isApiMode ? (!enabled || parentTable.loading) : undefined}
           pagination={isApiMode
             ? {
-              current: parentTable.page,
+              current: currentParentPage,
               pageSize: parentTable.pageSize,
               total: parentTable.total,
               showSizeChanger: false,
@@ -638,6 +655,7 @@ export default function AggregatedTables({
                 ...prev,
                 page,
                 pageSize: pageSize ?? prev.pageSize,
+                filterKey,
               })),
             }
             : { pageSize: 10, showSizeChanger: false, showTotal: (t) => `${t} строк` }}

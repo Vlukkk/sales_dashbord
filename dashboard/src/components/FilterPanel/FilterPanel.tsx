@@ -57,7 +57,7 @@ export default function FilterPanel({
         <div style={{ marginBottom: 4, fontWeight: 500, fontSize: 12 }}>Zeitraum</div>
         <RangePicker
           style={{ width: '100%' }}
-          popupClassName="dashboard-date-range-popup"
+          classNames={{ popup: { root: 'dashboard-date-range-popup' } }}
           value={filters.dateRange ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])] : null}
           onChange={(dates) => {
             if (dates && dates[0] && dates[1]) {

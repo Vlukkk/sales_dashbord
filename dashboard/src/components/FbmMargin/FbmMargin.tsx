@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { Button, Segmented, Space, Table, Typography } from 'antd';
+import { useMemo, useState, type CSSProperties } from 'react';
+import { Alert, Button, Segmented, Space, Table, Typography } from 'antd';
+import { CheckCircleOutlined, ClockCircleOutlined, FileExcelOutlined, FileTextOutlined, LoadingOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import type { SorterResult } from 'antd/es/table/interface';
 import dayjs from 'dayjs';
 import { useFbmMarginData } from '../../hooks/useFbmMarginData';
 import type { FbmMarginDetailRow, FbmMarginRow, FilterState } from '../../types';
 import { downloadCsv, downloadExcelWorkbook, type ExportColumn } from '../../utils/tableExport';
+import { serializeFilters } from '../../hooks/useServerFilters';
 
 const fmtMoney = (value: number) =>
   new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(value);
@@ -82,6 +84,25 @@ const DETAIL_EXPORT_COLUMNS: ExportColumn<FbmMarginDetailRow>[] = [
   { key: 'descriptions', header: 'Binder описание', type: 'string', width: 220, value: (row) => row.descriptions },
 ];
 
+type FbmExportRow = FbmMarginRow | FbmMarginDetailRow;
+type FbmWorkbookSheet = {
+  title: string;
+  worksheetName: string;
+  subtitle: string;
+  columns: ExportColumn<FbmExportRow>[];
+  rows: FbmExportRow[];
+};
+
+const ORDER_WORKBOOK_COLUMNS: ExportColumn<FbmExportRow>[] = ORDER_EXPORT_COLUMNS.map((column) => ({
+  ...column,
+  value: (row) => column.value(row as FbmMarginRow),
+}));
+
+const DETAIL_WORKBOOK_COLUMNS: ExportColumn<FbmExportRow>[] = DETAIL_EXPORT_COLUMNS.map((column) => ({
+  ...column,
+  value: (row) => column.value(row as FbmMarginDetailRow),
+}));
+
 const metaTextStyle: CSSProperties = {
   fontSize: 12,
   lineHeight: 1.35,
@@ -114,12 +135,23 @@ function renderBinderInfo(invoiceTypes: string, productCodes: string, descriptio
   );
 }
 
+function CalculationStatus({ matched }: { matched: boolean }) {
+  return (
+    <span className={`calculation-status calculation-status--${matched ? 'ready' : 'missing'}`}>
+      {matched ? <CheckCircleOutlined /> : <ClockCircleOutlined />}
+      {matched ? 'Рассчитано' : 'Нет счёта Binder'}
+    </span>
+  );
+}
+
 export default function FbmMargin({ filters }: Props) {
-  const [page, setPage] = useState(1);
+  const [pageState, setPageState] = useState({ page: 1, filterKey: '' });
   const [pageSize, setPageSize] = useState(10);
   const [sortBy, setSortBy] = useState('date');
   const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('DESC');
   const [viewMode, setViewMode] = useState<'orders' | 'details'>('orders');
+  const filterKey = useMemo(() => serializeFilters(filters).toString(), [filters]);
+  const page = pageState.filterKey === filterKey ? pageState.page : 1;
 
   const params = useMemo(
     () => ({
@@ -133,12 +165,8 @@ export default function FbmMargin({ filters }: Props) {
     [filters, page, pageSize, sortBy, sortDir, viewMode],
   );
 
-  const { rows, detailRows, total, summary, loading } = useFbmMarginData(params);
+  const { rows, detailRows, total, summary, loading, error, reload } = useFbmMarginData(params);
   const filterSummary = useMemo(() => buildFilterSummary(filters), [filters]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [filterSummary]);
 
   const matchedOrders = Math.max(0, summary.orderCount - summary.unmatchedOrders);
 
@@ -150,9 +178,10 @@ export default function FbmMargin({ filters }: Props) {
       sorter: true,
       width: 170,
       render: (value: string, row) => (
-        <div style={{ display: 'grid', gap: 2, opacity: row.hasBinderMatch ? 1 : 0.6 }}>
+        <div style={{ display: 'grid', gap: 4 }}>
           <span style={{ fontWeight: 600 }}>{value}</span>
           {row.invoiceNumbers ? <span style={metaTextStyle}>{row.invoiceNumbers}</span> : null}
+          <CalculationStatus matched={row.hasBinderMatch} />
         </div>
       ),
     },
@@ -217,7 +246,7 @@ export default function FbmMargin({ filters }: Props) {
       width: 110,
       align: 'right',
       render: (value: number, row) => (
-        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#059669' : '#111827', fontWeight: 600 }}>
+        <span style={{ color: row.hasBinderMatch ? (value >= 0 ? '#059669' : '#e11d48') : '#64748b', fontWeight: 600 }}>
           {row.hasBinderMatch ? fmtMoney(value) : '-'}
         </span>
       ),
@@ -230,7 +259,7 @@ export default function FbmMargin({ filters }: Props) {
       width: 85,
       align: 'right',
       render: (value: number, row) => (
-        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#059669' : '#111827' }}>
+        <span style={{ color: row.hasBinderMatch ? (value >= 0 ? '#059669' : '#e11d48') : '#64748b' }}>
           {row.hasBinderMatch ? fmtPct(value) : '-'}
         </span>
       ),
@@ -244,9 +273,10 @@ export default function FbmMargin({ filters }: Props) {
       key: 'orderNumber',
       width: 180,
       render: (value: string, row) => (
-        <div style={{ display: 'grid', gap: 2, opacity: row.hasBinderMatch ? 1 : 0.6 }}>
+        <div style={{ display: 'grid', gap: 4 }}>
           <span style={{ fontWeight: 600 }}>{value}</span>
           {renderOrderMeta(row.date, row.invoiceNumbers)}
+          <CalculationStatus matched={row.hasBinderMatch} />
         </div>
       ),
     },
@@ -306,7 +336,7 @@ export default function FbmMargin({ filters }: Props) {
       width: 110,
       align: 'right',
       render: (value: number, row) => (
-        <span style={{ color: row.hasBinderMatch && value >= 0 ? '#059669' : '#111827', fontWeight: 600 }}>
+        <span style={{ color: row.hasBinderMatch ? (value >= 0 ? '#059669' : '#e11d48') : '#64748b', fontWeight: 600 }}>
           {row.hasBinderMatch ? fmtMoney(value) : '-'}
         </span>
       ),
@@ -329,19 +359,19 @@ export default function FbmMargin({ filters }: Props) {
       setSortBy(String(resolvedSorter.columnKey));
       setSortDir(resolvedSorter.order === 'ascend' ? 'ASC' : 'DESC');
     }
-    setPage(pagination.current ?? 1);
+    setPageState({ page: pagination.current ?? 1, filterKey });
     setPageSize(pagination.pageSize ?? 10);
   };
 
   const exportSubtitle = filterSummary;
 
   const handleExportExcel = () => {
-    const sheets: any[] = [
+    const sheets: FbmWorkbookSheet[] = [
       {
         title: 'FBM Маржа',
         worksheetName: 'FBM Margin',
         subtitle: exportSubtitle,
-        columns: ORDER_EXPORT_COLUMNS,
+        columns: ORDER_WORKBOOK_COLUMNS,
         rows,
       },
     ];
@@ -351,12 +381,12 @@ export default function FbmMargin({ filters }: Props) {
         title: 'FBM Маржа · детали',
         worksheetName: 'FBM Details',
         subtitle: `Детализация по текущей странице: ${exportSubtitle}`,
-        columns: DETAIL_EXPORT_COLUMNS,
+        columns: DETAIL_WORKBOOK_COLUMNS,
         rows: detailRows,
       });
     }
 
-    downloadExcelWorkbook<any>('fbm-margin.xls', sheets);
+    downloadExcelWorkbook<FbmExportRow>('fbm-margin.xls', sheets);
   };
 
   const handleExportCsv = () => {
@@ -382,47 +412,39 @@ export default function FbmMargin({ filters }: Props) {
   ];
 
   return (
-    <div style={{ padding: '0 0 12px', display: 'grid', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+    <div className="fbm-page" aria-busy={loading}>
+      <div className="fbm-toolbar">
         <Typography.Text type="secondary">{filterSummary}</Typography.Text>
         <Space>
-          <Button size="small" onClick={handleExportCsv} disabled={rows.length === 0}>
+          <Button icon={<FileTextOutlined />} size="small" onClick={handleExportCsv} disabled={loading || Boolean(error) || rows.length === 0}>
             CSV
           </Button>
-          <Button size="small" onClick={handleExportExcel} disabled={rows.length === 0}>
+          <Button icon={<FileExcelOutlined />} size="small" onClick={handleExportExcel} disabled={loading || Boolean(error) || rows.length === 0}>
             Excel
           </Button>
         </Space>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: 10,
-        }}
-      >
+      {error && <Alert type="error" showIcon title="Не удалось загрузить маржу" action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void reload()}>Повторить</Button>} />}
+
+      <div className="bento fbm-metrics">
         {metrics.map((metric) => (
           <div
             key={metric.label}
-            className="card"
-            style={{ padding: '10px 12px', minHeight: 0, display: 'grid', gap: 4 }}
+            className="bento__item"
           >
             <span className="bento__label">{metric.label}</span>
-            <span className="bento__value" style={{ fontSize: 22, color: metric.color }}>
-              {metric.value}
+            <span className="bento__value" style={{ color: metric.color }}>
+              {loading || error ? '—' : metric.value}
             </span>
           </div>
         ))}
       </div>
 
-      <div className="card">
+      <div className="card fbm-results">
         <div className="card__header" style={{ gap: 12, flexWrap: 'wrap' }}>
           <div>
-            <h3 style={{ marginBottom: 4 }}>FBM Margin</h3>
-            <Typography.Text type="secondary">
-              В этой версии маржа считается только для заказов, у которых есть счёт Binder.
-            </Typography.Text>
+            <h3>Маржа FBM</h3>
           </div>
           <Segmented
             size="small"
@@ -435,9 +457,22 @@ export default function FbmMargin({ filters }: Props) {
           />
         </div>
 
+        <div className="fbm-calculation-summary" role="status">
+          {loading ? <span><LoadingOutlined spin /> Загрузка расчёта</span> : error ? (
+            <span>Расчёт недоступен</span>
+          ) : (
+            <>
+              <span className="calculation-status--ready"><CheckCircleOutlined /> Рассчитано: {fmtNum(matchedOrders)}</span>
+              <span className={summary.unmatchedOrders ? 'calculation-status--missing' : ''}><ClockCircleOutlined /> Без счёта Binder: {fmtNum(summary.unmatchedOrders)}</span>
+            </>
+          )}
+        </div>
+
         {viewMode === 'orders' ? (
           <Table<FbmMarginRow>
-            dataSource={rows}
+            className="agg-table"
+            scroll={{ x: 1080 }}
+            dataSource={error ? [] : rows}
             columns={orderColumns}
             rowKey="orderNumber"
             loading={loading}
@@ -446,7 +481,7 @@ export default function FbmMargin({ filters }: Props) {
             pagination={{
               current: page,
               pageSize,
-              total,
+              total: error ? 0 : total,
               showSizeChanger: true,
               pageSizeOptions: ['10', '20', '50'],
               showTotal: (value) => `${value} заказов`,
@@ -454,7 +489,9 @@ export default function FbmMargin({ filters }: Props) {
           />
         ) : (
           <Table<FbmMarginDetailRow>
-            dataSource={detailRows}
+            className="agg-table"
+            scroll={{ x: 1320 }}
+            dataSource={error ? [] : detailRows}
             columns={detailColumns}
             rowKey="rowKey"
             loading={loading}

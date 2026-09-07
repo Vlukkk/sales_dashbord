@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useId, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import dayjs from 'dayjs';
 import type { DashboardDailyPoint, EnrichedSale } from '../../types';
 import type { MetricSummary } from '../../utils/analytics';
@@ -42,9 +42,9 @@ interface HoverState {
 
 type HoverHandler = (point: DailyPoint | null, event?: ReactMouseEvent<SVGRectElement>) => void;
 
-const COLOR_REVENUE = '#4f46e5';
-const COLOR_SALES_BAR = '#a5b4fc';
-const COLOR_REFUNDS = '#e11d48';
+const COLOR_REVENUE = '#0d9488';
+const COLOR_SALES_BAR = '#5bc7bb';
+const COLOR_REFUNDS = '#be185d';
 const REFUND_RATE_ALERT = 10;
 const MIN_COMPARE_DAYS = 14;
 
@@ -125,16 +125,16 @@ function pickPeakIndexes(points: DailyPoint[], getValue: (point: DailyPoint) => 
   return picked;
 }
 
-function pickAxisTicks(points: DailyPoint[]) {
-  if (points.length <= 8) {
+function pickAxisTicks(points: DailyPoint[], budget: number) {
+  if (points.length <= budget) {
     return new Set(points.map((point) => point.date));
   }
 
-  const step = Math.ceil(points.length / 8);
+  const step = Math.ceil(points.length / budget);
   const ticks = points.filter((_, index) => index % step === 0).map((point) => point.date);
   const last = points[points.length - 1]?.date;
 
-  if (last && !ticks.includes(last)) {
+  if (last && points.length % step > step / 2 && !ticks.includes(last)) {
     ticks.push(last);
   }
 
@@ -169,7 +169,7 @@ function formatDateShort(value: string) {
 }
 
 function formatDateLong(value: string) {
-  return dayjs(value).format('DD MMMM');
+  return dayjs(value).format('DD.MM.YYYY');
 }
 
 function niceMax(value: number, steps = 4) {
@@ -190,21 +190,12 @@ function niceMax(value: number, steps = 4) {
   return Math.ceil(value / (niceStep * magnitude)) * niceStep * magnitude;
 }
 
-function nicePercentMax(value: number) {
-  if (value <= 0) {
-    return 10;
-  }
-
-  const rounded = Math.ceil(value / 5) * 5;
-  return Math.min(100, Math.max(10, rounded));
-}
-
 function xAt(index: number, count: number, left: number, width: number) {
   if (count <= 1) {
     return left + width / 2;
   }
 
-  return left + (index * width) / (count - 1);
+  return left + ((index + 0.5) * width) / count;
 }
 
 function linePath(
@@ -333,11 +324,11 @@ function PanelHeader({
 }
 
 function Tooltip({ state }: { state: HoverState }) {
-  const { point, left, top } = state;
+  const { point } = state;
   const avgOrder = point.sales > 0 ? point.revenue / point.sales : 0;
 
   return (
-    <div className="chart-tooltip" role="status" aria-live="polite" style={{ left, top }}>
+    <div className="chart-tooltip" role="status">
       <strong>{formatDateLong(point.date)}</strong>
       <div className="chart-tooltip__row">
         <span className="chart-tooltip__label">
@@ -354,7 +345,7 @@ function Tooltip({ state }: { state: HoverState }) {
           Возвраты
         </span>
         <b>
-          {formatMoneyFull(point.refundRevenue)} · {formatNumber(point.refunds)} шт · {point.refundRate.toFixed(1)}%
+          {formatMoneyFull(point.refundRevenue)} · {formatNumber(point.refunds)} шт · {point.sales > 0 ? `${point.refundRate.toFixed(1)}%` : 'нет базы для расчёта'}
         </b>
       </div>
     </div>
@@ -374,14 +365,17 @@ function RevenueRefundChart({
   chartId,
   points,
   onHover,
+  width,
+  activeDate,
 }: {
   chartId: string;
   points: DailyPoint[];
   onHover: HoverHandler;
+  width: number;
+  activeDate?: string;
 }) {
-  const width = 920;
-  const height = 180;
-  const margin = { top: 16, right: 16, bottom: 10, left: 60 };
+  const height = 260;
+  const margin = { top: 24, right: 40, bottom: 28, left: 52 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
   const maxValue = niceMax(
@@ -390,8 +384,10 @@ function RevenueRefundChart({
       0,
     ),
   );
-  const revenueLabels = pickPeakIndexes(points, (point) => point.revenue, points.length > 24 ? 4 : 5);
-  const refundLabels = pickPeakIndexes(points, (point) => point.refundRevenue, points.length > 24 ? 4 : 5);
+  const labelBudget = Math.max(1, Math.floor(innerWidth / 150));
+  const revenueLabels = pickPeakIndexes(points, (point) => point.revenue, labelBudget);
+  const refundLabels = pickPeakIndexes(points, (point) => point.refundRevenue, labelBudget);
+  const axisTicks = pickAxisTicks(points, Math.max(2, Math.floor(innerWidth / 70)));
   const revenuePath = linePath(points, (point) => point.revenue, margin.left, margin.top, innerWidth, innerHeight, maxValue);
   const refundPath = linePath(points, (point) => point.refundRevenue, margin.left, margin.top, innerWidth, innerHeight, maxValue);
   const revenueArea = areaPath(points, (point) => point.revenue, margin.left, margin.top, innerWidth, innerHeight, maxValue);
@@ -402,6 +398,8 @@ function RevenueRefundChart({
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
       className="chart-svg"
+      role="img"
+      aria-label="Выручка и сумма возвратов по дням"
       onMouseLeave={() => onHover(null)}
     >
       <defs>
@@ -462,13 +460,19 @@ function RevenueRefundChart({
 
         return (
           <g key={`${point.date}-labels`}>
+            {point.date === activeDate && (
+              <line className="chart-crosshair" x1={x} x2={x} y1={margin.top} y2={height - margin.bottom} />
+            )}
+            {axisTicks.has(point.date) && (
+              <text x={x} y={height - 7} textAnchor="middle" className="chart-svg__axis-label">{formatDateShort(point.date)}</text>
+            )}
             {revenueLabels.has(index) && point.revenue > 0 && (
-              <text x={x} y={revenueY - 8} textAnchor="middle" className="chart-svg__label">
+              <text x={x} y={revenueY - 8} textAnchor={index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle'} className="chart-svg__label">
                 {formatMoneyCompact(point.revenue)}
               </text>
             )}
             {refundLabels.has(index) && point.refundRevenue > 0 && (
-              <text x={x} y={refundY + 14} textAnchor="middle" className="chart-svg__label chart-svg__label--refund">
+              <text x={x} y={refundY + 14} textAnchor={index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle'} className="chart-svg__label chart-svg__label--refund">
                 {formatMoneyCompact(point.refundRevenue)}
               </text>
             )}
@@ -479,40 +483,49 @@ function RevenueRefundChart({
   );
 }
 
-function UnitsRefundRateChart({
+function UnitsRefundChart({
   points,
   onHover,
+  width,
+  activeDate,
 }: {
   points: DailyPoint[];
   onHover: HoverHandler;
+  width: number;
+  activeDate?: string;
 }) {
-  const width = 920;
-  const height = 208;
-  const margin = { top: 14, right: 54, bottom: 42, left: 50 };
+  const gradientId = `refund-units-${useId().replace(/:/g, '')}`;
+  const height = 190;
+  const margin = { top: 24, right: 40, bottom: 28, left: 52 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
-  const leftMax = niceMax(Math.max(...points.map((point) => point.sales), 0), 4);
-  const rightMax = nicePercentMax(Math.max(...points.map((point) => point.refundRate), 0));
-  const axisTicks = pickAxisTicks(points);
-  const labelBudget = points.length > 24 ? 4 : 5;
+  const leftMax = Math.ceil(niceMax(Math.max(...points.flatMap((point) => [point.sales, point.refunds]), 0), 4));
+  const tickStep = Math.max(1, Math.ceil(leftMax / 4));
+  const axisTicks = pickAxisTicks(points, Math.max(2, Math.floor(innerWidth / 70)));
+  const labelBudget = Math.max(1, Math.floor(innerWidth / 150));
   const salesLabels = pickPeakIndexes(points, (point) => point.sales, labelBudget);
-  const refundLabels = pickPeakIndexes(points, (point) => point.refundRate, labelBudget);
   const bandWidth = points.length > 0 ? innerWidth / points.length : innerWidth;
-  const barWidth = Math.min(28, bandWidth * 0.58);
-  const refundPath = linePath(points, (point) => point.refundRate, margin.left, margin.top, innerWidth, innerHeight, rightMax);
+  const barWidth = Math.min(28, bandWidth * 0.75);
 
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
       className="chart-svg"
+      role="img"
+      aria-label="Проданные и возвращённые штуки по дате заказа"
       onMouseLeave={() => onHover(null)}
     >
-      {Array.from({ length: 5 }).map((_, index) => {
-        const ratio = index / 4;
-        const y = margin.top + innerHeight * ratio;
-        const leftValue = leftMax * (1 - ratio);
-        const rightValue = rightMax * (1 - ratio);
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={COLOR_REFUNDS} stopOpacity="0.5" />
+          <stop offset="100%" stopColor={COLOR_REFUNDS} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {Array.from({ length: Math.floor(leftMax / tickStep) + 1 }).map((_, index) => {
+        const leftValue = index * tickStep;
+        const y = margin.top + innerHeight - (leftValue / leftMax) * innerHeight;
 
         return (
           <g key={`grid-${index}`}>
@@ -527,9 +540,6 @@ function UnitsRefundRateChart({
             <text x={margin.left - 10} y={y + 4} textAnchor="end" className="chart-svg__axis-label">
               {formatNumber(leftValue)}
             </text>
-            <text x={width - margin.right + 10} y={y + 4} textAnchor="start" className="chart-svg__axis-label chart-svg__axis-label--refund">
-              {rightValue.toFixed(0)}%
-            </text>
           </g>
         );
       })}
@@ -539,6 +549,8 @@ function UnitsRefundRateChart({
         const barHeight = leftMax > 0 ? (point.sales / leftMax) * innerHeight : 0;
         const barX = x + bandWidth / 2 - barWidth / 2;
         const barY = margin.top + innerHeight - barHeight;
+        const refundHeight = (point.refunds / leftMax) * innerHeight;
+        const refundY = margin.top + innerHeight - refundHeight;
 
         return (
           <g key={point.date}>
@@ -554,18 +566,43 @@ function UnitsRefundRateChart({
               onMouseMove={(event) => onHover(point, event)}
             />
 
-            <rect
+            {point.sales > 0 && <rect
               x={barX}
               y={barY}
               width={barWidth}
               height={barHeight}
-              rx={5}
+              rx={1}
               fill={COLOR_SALES_BAR}
-              opacity="0.9"
-            />
+              fillOpacity="0.1"
+              stroke={COLOR_REVENUE}
+              strokeOpacity="0.65"
+              strokeWidth="0.8"
+            />}
+
+            {point.refunds > 0 && (
+              <>
+                <rect
+                  className="chart-refund-fill"
+                  x={barX}
+                  y={refundY}
+                  width={barWidth}
+                  height={refundHeight}
+                  fill={`url(#${gradientId})`}
+                />
+                <line
+                  className="chart-refund-level"
+                  x1={barX}
+                  x2={barX + barWidth}
+                  y1={refundY}
+                  y2={refundY}
+                  stroke={COLOR_REFUNDS}
+                  strokeWidth="2"
+                />
+              </>
+            )}
 
             {salesLabels.has(index) && point.sales > 0 && (
-              <text x={barX + barWidth / 2} y={barY - 6} textAnchor="middle" className="chart-svg__label">
+              <text x={barX + barWidth / 2} y={barY - 6} textAnchor={index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle'} className="chart-svg__label">
                 {formatNumber(point.sales)}
               </text>
             )}
@@ -573,23 +610,17 @@ function UnitsRefundRateChart({
         );
       })}
 
-      <path d={refundPath} fill="none" stroke={COLOR_REFUNDS} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-
       {points.map((point, index) => {
         const x = xAt(index, points.length, margin.left, innerWidth);
-        const y = margin.top + innerHeight - (point.refundRate / rightMax) * innerHeight;
         const showTick = axisTicks.has(point.date);
 
         return (
           <g key={`${point.date}-refund`}>
-            <circle cx={x} cy={y} r="3.4" fill={COLOR_REFUNDS} />
-            {refundLabels.has(index) && point.refundRate > 0 && (
-              <text x={x} y={y - 10} textAnchor="middle" className="chart-svg__label chart-svg__label--refund">
-                {point.refundRate.toFixed(0)}%
-              </text>
+            {point.date === activeDate && (
+              <line className="chart-crosshair" x1={x} x2={x} y1={margin.top} y2={height - margin.bottom} />
             )}
             {showTick && (
-              <text x={x} y={height - 12} textAnchor="middle" className="chart-svg__axis-label">
+              <text x={x} y={height - 7} textAnchor="middle" className="chart-svg__axis-label">
                 {formatDateShort(point.date)}
               </text>
             )}
@@ -617,6 +648,17 @@ const EMPTY_SUMMARY: MetricSummary = {
 
 export default function SalesRefundChart(props: Props) {
   const chartId = useId().replace(/:/g, '');
+  const plotRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(480);
+  useEffect(() => {
+    const plot = plotRef.current;
+    if (!plot) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 0) setChartWidth(entry.contentRect.width);
+    });
+    observer.observe(plot);
+    return () => observer.disconnect();
+  }, []);
   const [hoveredRevenuePoint, setHoveredRevenuePoint] = useState<HoverState | null>(null);
   const [hoveredUnitsPoint, setHoveredUnitsPoint] = useState<HoverState | null>(null);
   const normalized = props.mode === 'api'
@@ -644,6 +686,8 @@ export default function SalesRefundChart(props: Props) {
     })();
 
   const { daily, summaryCurrent, summaryPrevious, hasPrevious, from, to, rowCount } = normalized;
+  const hoveredPoint = hoveredRevenuePoint ?? hoveredUnitsPoint;
+  const activeDate = daily.find((point) => point.date === hoveredPoint?.point.date)?.date;
   const totalUnits = summaryCurrent.units + summaryCurrent.refundedUnits;
   const windowDays = from && to ? Math.max(1, dayjs(to).diff(dayjs(from), 'day') + 1) : null;
   const handleRevenueHover: HoverHandler = (point, event) => {
@@ -653,6 +697,7 @@ export default function SalesRefundChart(props: Props) {
     }
 
     setHoveredRevenuePoint(buildHoverState(point, event));
+    setHoveredUnitsPoint(null);
   };
   const handleUnitsHover: HoverHandler = (point, event) => {
     if (!point || !event) {
@@ -661,9 +706,10 @@ export default function SalesRefundChart(props: Props) {
     }
 
     setHoveredUnitsPoint(buildHoverState(point, event));
+    setHoveredRevenuePoint(null);
   };
 
-  const kpis = useMemo<Kpi[]>(() => ([
+  const kpis: Kpi[] = [
     {
       label: 'Выручка',
       value: formatMoneyCompact(summaryCurrent.revenue),
@@ -691,64 +737,57 @@ export default function SalesRefundChart(props: Props) {
       deltaInverted: true,
       alert: summaryCurrent.refundRate > REFUND_RATE_ALERT,
     },
-  ]), [hasPrevious, summaryCurrent, summaryPrevious]);
+  ];
 
   return (
-    <div className="chart-card">
+    <section className="chart-card" aria-label={props.title}>
       <div className="chart-card__title">
         <div>
           <h3>{props.title}</h3>
-          {hasPrevious && from && to ? (
-            <div className="chart-card__subtitle">
-              Сравнение с предыдущим периодом для окна {from}..{to}
-            </div>
-          ) : (
-            <div className="chart-card__subtitle">Добавьте диапазон дат, чтобы видеть сравнение с предыдущим периодом.</div>
-          )}
+          <div className="chart-card__subtitle">
+            {from && to ? `${dayjs(from).format('DD.MM.YYYY')} – ${dayjs(to).format('DD.MM.YYYY')}` : 'За весь период'}
+            {hasPrevious ? ' · сравнение с предыдущим периодом' : ''}
+          </div>
         </div>
         <div className="chart-card__title-right">
           <span>{daily.length} дн · {rowCount} записей</span>
         </div>
       </div>
 
-      {totalUnits === 0 ? (
-        <div className="chart-card__body chart-card__body--stacked">
-          <div className="chart-empty">Нет данных</div>
-        </div>
-      ) : (
-        <>
+      <div ref={plotRef} className="chart-bento">
           <KpiRow items={kpis} windowDays={windowDays} />
+          {totalUnits === 0 ? <div className="chart-empty">Нет данных за выбранный период</div> : (
           <div className="chart-card__body chart-card__body--stacked">
             <div className="chart-card__panel chart-card__panel--top">
               <PanelHeader
-                title="Динамика выручки и суммы возвратов, €"
+                title="Выручка и возвраты, €"
                 items={[
                   { label: 'Выручка', color: COLOR_REVENUE },
                   { label: 'Возвраты', color: COLOR_REFUNDS },
                 ]}
               />
               <div className="chart-card__plot">
-                {hoveredRevenuePoint && <Tooltip state={hoveredRevenuePoint} />}
-                <RevenueRefundChart chartId={chartId} points={daily} onHover={handleRevenueHover} />
+                {hoveredRevenuePoint && activeDate && <Tooltip state={hoveredRevenuePoint} />}
+                <RevenueRefundChart chartId={chartId} width={chartWidth - 24} activeDate={activeDate} points={daily} onHover={handleRevenueHover} />
               </div>
             </div>
 
             <div className="chart-card__panel chart-card__panel--bottom">
               <PanelHeader
-                title="Объем продаж (шт.) и доля возвратов (%)"
+                title="Продажи и возвраты по дате заказа"
                 items={[
-                  { label: 'Продажи, шт', color: COLOR_SALES_BAR },
-                  { label: 'Возвраты, %', color: COLOR_REFUNDS },
+                  { label: 'Продано, шт', color: COLOR_REVENUE },
+                  { label: 'Возвращено, шт', color: COLOR_REFUNDS },
                 ]}
               />
               <div className="chart-card__plot">
-                {hoveredUnitsPoint && <Tooltip state={hoveredUnitsPoint} />}
-                <UnitsRefundRateChart points={daily} onHover={handleUnitsHover} />
+                {hoveredUnitsPoint && activeDate && <Tooltip state={hoveredUnitsPoint} />}
+                <UnitsRefundChart width={chartWidth - 24} activeDate={activeDate} points={daily} onHover={handleUnitsHover} />
               </div>
             </div>
           </div>
-        </>
-      )}
-    </div>
+          )}
+      </div>
+    </section>
   );
 }
